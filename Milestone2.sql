@@ -328,3 +328,7 @@ EXEC createAllTables;
 
 DROP PROC createAllTables;
 
+
+
+create table b1();
+
