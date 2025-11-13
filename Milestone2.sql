@@ -407,76 +407,154 @@ BEGIN
 END
 --2.4.C
 GO
-CREATE PROC HR_approval_unpaid
-@request_ID int, 
-@HR_ID int
-    AS
-    BEGIN
-    DECLARE @annual_balance INT,
-            @emp_ID INT,
+CREATE PROC HR_approval_an_acc
+    @request_ID INT,
+    @HR_ID INT
+AS
+BEGIN
+    DECLARE @emp_ID INT,
+            @annual_balance INT,
+            @accidental_balance INT,
             @num_days INT,
+            @leave_type VARCHAR(20),
             @approval_status VARCHAR(50)
 
-    SELECT @num_days = num_days
-    FROM Leave 
-    WHERE u1.request_ID = @request_ID
-    IF(@num_days>30)
-        SET @approval_status='Rejected'
-    ELSE 
-        SELECT @emp_ID = ul.emp_ID, 
-               @annual_balance = e.annual_balance
-        FROM Unpaid_Leave ul
-        INNER JOIN Employee e ON ul.emp_ID = e.employee_ID
-        WHERE ul.request_ID = @request_ID
-        
-        IF(@annual_balance>0)
-            SET @approval_status='Rejected'
-        ELSE
-            SET @approval_status='Accepted'
+    -- Fix: Remove the extra END and RETURN that were in the middle of the code
+    IF EXISTS (SELECT 1 FROM Annual_Leave WHERE request_ID = @request_ID)
+        SET @leave_type = 'annual'
+    ELSE
+        SET @leave_type = 'accidental'
 
-   UPDATE Leave 
-    SET final_approval_status = @approval_status 
+    SELECT @num_days = num_days 
+    FROM Leave 
     WHERE request_ID = @request_ID
 
-END
+    IF @leave_type = 'annual'
+    BEGIN
+        SELECT @emp_ID = al.emp_ID, 
+               @annual_balance = e.annual_balance
+        FROM Annual_Leave al
+        INNER JOIN Employee e ON al.emp_ID = e.employee_ID
+        WHERE al.request_ID = @request_ID
 
+        IF @annual_balance >= @num_days
+        BEGIN
+            SET @approval_status = 'Approved'
+            UPDATE Employee 
+            SET annual_balance = annual_balance - @num_days 
+            WHERE employee_ID = @emp_ID
+        END
+        ELSE
+        BEGIN
+            SET @approval_status = 'Rejected'
+        END
+    END
+    ELSE IF @leave_type = 'accidental'
+    BEGIN
+        SELECT @emp_ID = al.emp_ID, 
+               @accidental_balance = e.accidental_balance
+        FROM Accidental_Leave al
+        INNER JOIN Employee e ON al.emp_ID = e.employee_ID
+        WHERE al.request_ID = @request_ID
+
+        IF @accidental_balance >= @num_days
+        BEGIN
+            SET @approval_status = 'Approved'
+            UPDATE Employee 
+            SET accidental_balance = accidental_balance - @num_days 
+            WHERE employee_ID = @emp_ID
+        END
+        ELSE
+        BEGIN
+            SET @approval_status = 'Rejected'
+        END
+    END
+
+    UPDATE Leave 
+    SET final_approval_status = @approval_status 
+    WHERE request_ID = @request_ID
+END
+GO
+CREATE FUNCTION Overtime(@employee_ID INT)
+RETURNS DECIMAL(10,2)
+AS
+BEGIN
+    RETURN (
+    SELECT ISNULL(SUM(
+          CASE 
+             WHEN DATEDIFF(HOUR, check_in_time, check_out_time) > 8 
+             THEN DATEDIFF(HOUR, check_in_time, check_out_time) - 8
+             ELSE 0
+            END
+        ), 0)
+
+        FROM ATTENDANCE 
+        WHERE 
+            emp_ID = @employee_ID
+            AND MONTH(date) = MONTH(GETDATE())
+            AND YEAR(date) = YEAR(GETDATE())
+            AND check_in_time IS NOT NULL
+            AND check_out_time IS NOT NULL
+            AND status = 'Present'
+    )
+END
 GO
 --2.4.F
 CREATE PROC Deduction_days
 @employee_ID int
 AS
-DECLARE @rate_per_hour decimal(10,2),
-        @total_deduction decimal(10,2),
-        @missingDays INT,
-        @salary decimal(10,2),
-        @date DATE
-SET @rate_per_hour= Rate_per_hour(@employee_ID)
 BEGIN
-SELECT @missingDays = COUNT(*)
-FROM ATTENDANCE a
-WHERE 
-a.emp_ID=@employee_ID
-AND
-MONTH(date) = MONTH(GETDATE())
-AND 
-YEAR(date) = YEAR(GETDATE())
-AND
-a.status='Absent'
+    DECLARE @rate_per_hour decimal(10,2),
+            @daily_deduction decimal(10,2)
+
+    SET @rate_per_hour = Rate_per_hour(@employee_ID)
+    SET @daily_deduction = @rate_per_hour * 8
+
+   
+    INSERT INTO Deduction (emp_ID, date, amount, type, status)
+    SELECT 
+        @employee_ID,
+        a.date,  
+        @daily_deduction,
+        'missing day',
+        'pending'
+    FROM ATTENDANCE a
+    WHERE 
+        a.emp_ID = @employee_ID
+        AND MONTH(a.date) = MONTH(GETDATE())
+        AND YEAR(a.date) = YEAR(GETDATE())
+        AND a.status = 'Absent'
 END
-BEGIN 
-SELECT TOP 1 @Date = date
-FROM ATTENDANCE a
-WHERE 
-    a.emp_ID = @employee_ID
-    AND
-    MONTH(date) = MONTH(GETDATE())
-    AND 
-    YEAR(date) = YEAR(GETDATE())
-    AND a.status = 'Absent'
-ORDER BY date ASC
-END
-SET @total_deduction = @missingDays*@rate_per_hour*8
-INSERT INTO Deduction
-Values(ID,@employee_ID,@date,@total_deduction,'missing day','pending')
+EXEC Deduction_days @employee_ID = 1
+
+GO
+CREATE FUNCTION Bonus_amount(@employee_ID int)
+RETURNS  Decimal(10,2) 
+AS
+BEGIN
+DECLARE @rate_per_hour Decimal(10,2),
+        @bonus_value Decimal(10,2),
+        @percentage_overtime decimal(4,2),
+        @extra_hours INT
+SET @rate_per_hour=Rate_per_hour(@employee_ID)
+SET @extra_hours=overtime(@employee_ID)
+ WITH HighestRankRole AS (
+        SELECT TOP 1 
+            R.percentage_overtime
+        FROM Employee_Role ER
+        INNER JOIN Role R ON ER.role_name = R.role_name
+        INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
+        WHERE ER.emp_ID = @emp_ID
+        ORDER BY R.rank ASC 
+    )
+    SELECT @percentage_overtime = percentage_overtime
+    FROM HighestRankRole;
+
+    SET @bonus_value= @rate_per_hour*(@extra_hours/100)
+        
+
+
+RETURN @bonus_value
+
 
 GO
