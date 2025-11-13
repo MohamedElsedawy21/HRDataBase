@@ -502,6 +502,11 @@ VALUES
 ('John', 'Doe', 'john.doe@example.com', 'pass123', '123 Main St', 'M', 'Friday', 5, '1234567890123456', 'active', 'full_time', 'Jane Doe', '01234567890', 20, 5, 5000.00, '2020-01-15', NULL, 'IT'),
 ('Alice', 'Smith', 'alice.smith@example.com', 'alice123', '456 Oak St', 'F', 'Monday', 3, '2345678901234567', 'active', 'part_time', 'Bob Smith', '09876543210', 15, 3, 3500.00, '2021-03-10', NULL, 'HR'),
 ('Bob', 'Johnson', 'bob.johnson@example.com', 'bobpass', '789 Pine St', 'M', 'Wednesday', 7, '3456789012345678', 'active', 'full_time', 'Mary Johnson', '01122334455', 25, 7, 6000.00, '2019-06-20', NULL, 'Finance');
+INSERT INTO Employee (first_name, last_name, email, password, address, gender, official_day_off, years_of_experience, national_ID, employment_status, type_of_contract, emergency_contact_name, emergency_contact_phone, annual_balance, accidental_balance, salary, hire_date, last_working_date, dept_name)
+VALUES
+('Michael', 'Brown', 'michael.brown@example.com', 'mikepass', '321 Cedar St', 'M', 'Thursday', 10, '4567890123456789', 'resigned', 'full_time', 'Laura Brown', '02233445566', 12, 4, 5500.00, '2018-02-01', '2024-08-15', 'Operations'),
+('Emma', 'Wilson', 'emma.wilson@example.com', 'emma987', '654 Spruce St', 'F', 'Sunday', 4, '5678901234567890', 'resigned', 'part_time', 'Chris Wilson', '03344556677', 18, 6, 3000.00, '2022-05-12', '2025-01-30', 'Marketing');
+
 
 -- ==========================
 -- 3. Employee_Phone
@@ -606,6 +611,21 @@ VALUES
 ('Medical', 'Sick certificate', 'doc1.pdf', '2025-11-01', '2025-12-01', 'valid', 3, 3, NULL),
 ('Medical', 'Sick certificate', 'doc1.pdf', '2025-10-01', '2025-11-01', 'valid', 3, 3, NULL);
 
+-- Expired Yesterday (2025-11-13)
+INSERT INTO Document (type, description, file_name, creation_date, expiry_date, status, emp_ID, medical_ID, unpaid_ID)
+VALUES 
+('Medical', 'Expired sick note', 'doc_exp_yesterday.pdf', '2025-10-20', '2025-11-13', 'expired', 3, 4, NULL);
+
+-- Expired a Week Ago (2025-11-07)
+INSERT INTO Document (type, description, file_name, creation_date, expiry_date, status, emp_ID, medical_ID, unpaid_ID)
+VALUES
+('Medical', 'Medical leave proof', 'doc_exp_weekago.pdf', '2025-09-15', '2025-11-07', 'expired', 3, 5, NULL);
+
+-- Expired Last Year (2024-11-14)
+INSERT INTO Document (type, description, file_name, creation_date, expiry_date, status, emp_ID, medical_ID, unpaid_ID)
+VALUES
+('Medical', 'Old medical certificate', 'doc_exp_lastyear.pdf', '2024-10-10', '2024-11-14', 'expired', 3, 6, NULL);
+
 -- ==========================
 -- 14. Payroll
 -- ==========================
@@ -621,6 +641,35 @@ VALUES
 ('2025-11-10', '09:00', '17:00', '08:00', 'attended', 1),
 ('2025-11-11', '09:15', '17:00', '07:45', 'attended', 1),
 ('2025-11-12', '09:00', '17:00', '08:00', 'absent', 1);
+INSERT INTO Attendance (date, check_in_time, check_out_time, total_duration, status, emp_ID)
+VALUES
+-- John Doe (emp_ID = 1)
+('2025-11-10', '09:00:00', '17:00:00', '08:00:00', 'attended', 1),
+('2025-11-11', '09:05:00', '17:00:00', '07:55:00', 'attended', 1),
+('2025-11-12', NULL, NULL, '00:00:00', 'absent', 1),
+('2025-11-13', '09:00:00', '17:10:00', '08:10:00', 'attended', 1),
+('2025-11-14', '09:10:00', '17:00:00', '07:50:00', 'attended', 1),
+('2025-11-15', '09:00:00', '17:00:00', '08:00:00', 'attended', 1),
+('2025-11-16', NULL, NULL, '00:00:00', 'absent', 1),
+
+-- Alice Smith (emp_ID = 2)
+('2025-11-10', '08:55:00', '16:55:00', '08:00:00', 'attended', 2),
+('2025-11-11', NULL, NULL, '00:00:00', 'absent', 2),
+('2025-11-12', '09:10:00', '17:05:00', '07:55:00', 'attended', 2),
+('2025-11-13', '09:00:00', '17:00:00', '08:00:00', 'attended', 2),
+('2025-11-14', NULL, NULL, '00:00:00', 'absent', 2),
+('2025-11-15', '09:05:00', '17:10:00', '08:05:00', 'attended', 2),
+('2025-11-16', '09:00:00', '17:00:00', '08:00:00', 'attended', 2),
+
+-- Bob Johnson (emp_ID = 3)
+('2025-11-10', '09:00:00', '17:00:00', '08:00:00', 'attended', 3),
+('2025-11-11', '09:00:00', '17:05:00', '08:05:00', 'attended', 3),
+('2025-11-12', '09:10:00', '17:00:00', '07:50:00', 'attended', 3),
+('2025-11-13', '09:00:00', '17:00:00', '08:00:00', 'attended', 3),
+('2025-11-14', '09:05:00', '17:10:00', '08:05:00', 'attended', 3),
+('2025-11-15', NULL, NULL, '00:00:00', 'absent', 3),
+('2025-11-16', '09:00:00', '17:00:00', '08:00:00', 'attended', 3);
+
 
 -- ==========================
 -- 16. Deduction
@@ -628,6 +677,37 @@ VALUES
 INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
 VALUES
 (1, '2025-11-12', 100.00, 'missing_hours', 'pending', NULL, 3);
+-- Emma Wilson (emp_ID = 5)
+
+INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
+VALUES
+(5, '2025-11-08', 80.00, 'late_arrival', 'approved', NULL, 6),
+
+(5, '2025-10-29', 120.00, 'missing_hours', 'pending', NULL, 7),
+
+(5, '2025-09-15', 50.00, 'early_leave', 'approved', NULL, 8),
+
+(5, '2025-08-03', 200.00, 'no_show', 'pending', NULL, 9);
+-- Deduction for Michael Brown (resigned employee, emp_ID = 4)
+INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
+VALUES
+(4, '2025-11-10', 150.00, 'missing_hours', 'pending', NULL, 5);
+INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
+VALUES
+(1, '2025-11-10', 120.00, 'missing_hours', 'pending', NULL, 1),
+(1, '2025-10-25', 60.00, 'late_arrival', 'approved', NULL, 2),
+(1, '2025-09-15', 200.00, 'no_show', 'pending', NULL, 3);
+
+INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
+VALUES
+(2, '2025-11-05', 45.00, 'late_arrival', 'approved', NULL, 4),
+(2, '2025-10-18', 90.00, 'early_leave', 'pending', NULL, 5),
+(2, '2025-09-30', 150.00, 'missing_hours', 'approved', NULL, 6);
+INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
+VALUES
+(3, '2025-11-01', 70.00, 'late_arrival', 'approved', NULL, 7),
+(3, '2025-10-20', 130.00, 'missing_hours', 'pending', NULL, 8),
+(3, '2025-08-29', 250.00, 'no_show', 'approved', NULL, 9);
 
 
 -- ==========================
@@ -667,7 +747,7 @@ VALUES
 
 
 
-
+go
 
 --2.2 a 
 CREATE PROC  Update_Status_Doc
@@ -686,13 +766,16 @@ go
 
 CREATE PROC  Remove_Deductions
 as 
-DELETE
-FROM deductions WHERE employee_ID IN(
-select employee_ID as r
-from employee 
-where employment_status = 'resigned' )
+DELETE d
+FROM deduction d WHERE d.emp_ID IN(
+select e.employee_ID
+from employee e
+where e.employment_status = 'resigned' )
 go
 EXEC Remove_Deductions
+select* from deduction
+select*from employee
+drop procedure Remove_Deductions
 
 --c missing
 
@@ -709,6 +792,7 @@ create table Holiday
 
     go
 exec Create_Holiday
+select* from holiday
 go
     --2.2 e
 
@@ -722,7 +806,11 @@ INSERT INTO Holiday (name, from_date, to_date)
 
 
 go
-exec Add_Holiday
+exec Add_Holiday @holiday_name= 'eid al fitr',
+@from_date = '2026-02-27',
+    @to_date = '2026-03-3'
+
+
 
 
 go
@@ -733,7 +821,7 @@ as
 delete a 
 from Attendance a join employee e 
 on a.emp_ID = e.employee_ID
-where DAYNAME(a.date) = e.official_day_off
+where DATENAME(WEEKDAY, a.date) = e.official_day_off
  go 
  exec Remove_DayOff  
  go 
