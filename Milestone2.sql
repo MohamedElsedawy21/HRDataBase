@@ -636,7 +636,6 @@ VALUES
 INSERT INTO Unpaid_Leave (request_id, emp_id)
 VALUES
 (3, 1);
-
 -- ==========================
 -- 12. Compensation_Leave
 -- ==========================
