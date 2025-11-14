@@ -4,6 +4,47 @@ use University_HR_ManagementSystem_Team_58;
 
 GO
 
+CREATE FUNCTION Salary(@emp_ID INT)
+
+RETURNS decimal(10,2)
+AS
+BEGIN
+    DECLARE @calculated_salary DECIMAL(10,2)=0;
+    
+    WITH HighestRankRole AS (
+        SELECT TOP 1 
+            R.base_salary,
+            R.percentage_YOE,
+            E.years_of_experience
+        FROM Employee_Role ER
+        INNER JOIN Role R ON ER.role_name = R.role_name
+        INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
+        WHERE ER.emp_ID = @emp_ID
+        ORDER BY R.rank ASC 
+    )
+    SELECT @calculated_salary = 
+        base_salary + 
+        (percentage_YOE / 100.0) * years_of_experience * base_salary
+    FROM HighestRankRole;
+
+    RETURN @calculated_salary;
+END;
+
+GO
+
+CREATE Function Rate_per_hour(@employee_ID INT)
+RETURNS  Decimal(10,2) 
+AS
+BEGIN
+DECLARE @salary Decimal(10,2),
+        @Rate Decimal(10,2)
+SET @salary = dbo.Salary(@employee_ID)
+SET @Rate= (@salary/22)/8
+Return @Rate
+END;
+
+GO
+
 CREATE VIEW allEmployeeProfiles
 As
 SELECT employee_ID,first_name,last_name, gender, email, address, years_of_experience,
@@ -886,3 +927,114 @@ AS
 
    go
 
+GO
+CREATE PROC Deduction_hours
+@employee_ID int
+AS
+BEGIN
+    DECLARE @MissingSeconds INT;
+    DECLARE @MissingHours DECIMAL(10,2);
+    DECLARE @Emp_rate DECIMAL(10,2);
+    DECLARE @deduction_amount DECIMAL(10,2);
+    DECLARE @first_attendance_id INT;
+SELECT 
+    @MissingSeconds=(COUNT(*) * 8 * 60 * 60) - SUM(DATEDIFF(SECOND, '00:00:00', A.total_duration)) 
+FROM Attendance A
+WHERE A.emp_ID = @employee_ID 
+    AND A.total_duration < '08:00:00' 
+    AND MONTH(A.date) = MONTH(GETDATE())
+    AND YEAR(A.date) = YEAR(GETDATE());
+
+SELECT TOP 1 @first_attendance_id = A.attendance_ID
+    FROM Attendance A
+    WHERE A.emp_ID = @employee_ID 
+        AND A.total_duration < '08:00:00' 
+        AND MONTH(A.date) = MONTH(GETDATE())
+        AND YEAR(A.date) = YEAR(GETDATE())
+    ORDER BY A.date ASC;
+
+IF @MissingSeconds IS NULL OR @MissingSeconds <= 0
+        RETURN;
+SELECT @Emp_rate = dbo.Rate_per_hour(@employee_ID);
+SET @MissingHours = @MissingSeconds / 3600.0;
+SET @deduction_amount = @Emp_rate * @MissingHours;
+INSERT INTO Deduction (
+        emp_ID, date, amount, type, status, attendance_ID
+    ) VALUES (
+        @employee_ID, 
+        GETDATE(), 
+        @deduction_amount, 
+        'missing_hours', 
+        'pending', 
+        @first_attendance_id
+    );
+
+END;
+
+
+GO
+
+CREATE PROCEDURE Deduction_unpaid
+@employee_ID INT
+AS
+BEGIN
+DECLARE @Start_date date;
+DECLARE @End_date date ;
+DECLARE @Emp_Dayrate Decimal(10,2);
+DECLARE @Ded_amount Decimal(10,2);
+DECLARE @Unpaid_ID INT;
+SET @Emp_Dayrate=dbo.Rate_per_hour(@employee_ID)*8
+
+
+SELECT @Unpaid_ID=ul.request_id,@Start_date=l.start_date,@End_date=l.end_date
+FROM unpaid_leave ul inner join leave l on(ul.request_id=l.request_id)
+WHERE ul.emp_id=@employee_ID and MONTH(GETDATE())=MONTH(l.start_date) and l.final_approval_status='approved'
+
+
+if @Unpaid_ID IS NULL
+BEGIN
+    RETURN;
+END
+
+if MONTH(@Start_date)=MONTH(@End_date)
+BEGIN
+
+SET @Ded_amount= (DATEDIFF(DAY, @Start_date, @End_date) + 1)*@Emp_Dayrate
+INSERT INTO Deduction (emp_ID,date,amount,type,status,unpaid_ID) VALUES(
+@employee_ID,
+GETDATE(),
+@Ded_amount,
+'unpaid',
+'pending',
+@Unpaid_ID
+)
+END
+
+
+ELSE
+
+BEGIN
+SET @Ded_amount= (DATEDIFF(DAY, @Start_date, EOMONTH(GETDATE())) + 1)*@Emp_Dayrate
+INSERT INTO Deduction (emp_ID,date,amount,type,status,unpaid_ID) VALUES(
+@employee_ID,
+GETDATE(),
+@Ded_amount,
+'unpaid',
+'pending',
+@Unpaid_ID
+)
+SET @Ded_amount= (DATEDIFF(DAY,DATEADD(DAY, 1 - DAY(@End_date), @End_date), @End_date)+1)*@Emp_Dayrate
+INSERT INTO Deduction (emp_ID,date,amount,type,status,unpaid_ID) VALUES(
+@employee_ID,
+GETDATE(),
+@Ded_amount,
+'unpaid',
+'pending',
+@Unpaid_ID
+)
+END
+
+
+END
+
+go
