@@ -927,48 +927,6 @@ AS
    go
 
 GO
-CREATE PROC Deduction_hours
-@employee_ID int
-AS
-BEGIN
-    DECLARE @MissingSeconds INT;
-    DECLARE @MissingHours DECIMAL(10,2);
-    DECLARE @Emp_rate DECIMAL(10,2);
-    DECLARE @deduction_amount DECIMAL(10,2);
-    DECLARE @first_attendance_id INT;
-SELECT 
-    @MissingSeconds=(COUNT(*) * 8 * 60 * 60) - SUM(DATEDIFF(SECOND, '00:00:00', A.total_duration)) 
-FROM Attendance A
-WHERE A.emp_ID = @employee_ID 
-    AND A.total_duration < '08:00:00' 
-    AND MONTH(A.date) = MONTH(GETDATE())
-    AND YEAR(A.date) = YEAR(GETDATE());
-
-SELECT TOP 1 @first_attendance_id = A.attendance_ID
-    FROM Attendance A
-    WHERE A.emp_ID = @employee_ID 
-        AND A.total_duration < '08:00:00' 
-        AND MONTH(A.date) = MONTH(GETDATE())
-        AND YEAR(A.date) = YEAR(GETDATE())
-    ORDER BY A.date ASC;
-
-IF @MissingSeconds IS NULL OR @MissingSeconds <= 0
-        RETURN;
-SELECT @Emp_rate = dbo.Rate_per_hour(@employee_ID);
-SET @MissingHours = @MissingSeconds / 3600.0;
-SET @deduction_amount = @Emp_rate * @MissingHours;
-INSERT INTO Deduction (
-        emp_ID, date, amount, type, status, attendance_ID
-    ) VALUES (
-        @employee_ID, 
-        GETDATE(), 
-        @deduction_amount, 
-        'missing_hours', 
-        'pending', 
-        @first_attendance_id
-    );
-
-END;
 
 
 GO
@@ -1037,3 +995,46 @@ END
 END
 
 go
+
+
+
+CREATE PROC Deduction_hours
+@employee_ID int
+AS
+BEGIN
+    DECLARE @MissingHours DECIMAL(10,2);
+    DECLARE @Emp_rate DECIMAL(10,2);
+    DECLARE @deduction_amount DECIMAL(10,2);
+    DECLARE @first_attendance_id INT;
+SELECT 
+    @MissingHours=(COUNT(*) * 8) - SUM(DATEDIFF(HOUR, '00:00:00', A.total_duration)) 
+FROM Attendance A
+WHERE A.emp_ID = @employee_ID 
+    AND A.total_duration < '08:00:00' 
+    AND MONTH(A.date) = MONTH(GETDATE())
+    AND YEAR(A.date) = YEAR(GETDATE());
+
+SELECT TOP 1 @first_attendance_id = A.attendance_ID
+    FROM Attendance A
+    WHERE A.emp_ID = @employee_ID 
+        AND A.total_duration < '08:00:00' 
+        AND MONTH(A.date) = MONTH(GETDATE())
+        AND YEAR(A.date) = YEAR(GETDATE())
+    ORDER BY A.date ASC;
+
+IF @MissingHours IS NULL OR @MissingHours <= 0
+        RETURN;
+SELECT @Emp_rate = dbo.Rate_per_hour(@employee_ID);
+SET @deduction_amount = @Emp_rate * @MissingHours;
+INSERT INTO Deduction (
+        emp_ID, date, amount, type, status, attendance_ID
+    ) VALUES (
+        @employee_ID, 
+        GETDATE(), 
+        @deduction_amount, 
+        'missing_hours', 
+        'pending', 
+        @first_attendance_id
+    );
+
+END;
