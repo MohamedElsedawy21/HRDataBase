@@ -1266,3 +1266,18 @@ WHERE employee_ID=@Employee_ID and @ISONLEAVE=0
 END
 
 GO
+
+
+CREATE PROC Dean_andHR_Evaluation
+@employee_ID INT,
+@rating INT,
+@comment VARCHAR(50),
+@semester CHAR(3)
+AS 
+BEGIN
+INSERT INTO Performance (rating,comments,semester,emp_ID) VALUES 
+(@rating,@comment,@semester,@employee_ID)
+END
+
+
+GO
