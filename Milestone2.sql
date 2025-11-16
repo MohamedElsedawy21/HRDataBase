@@ -1,4 +1,4 @@
-﻿create database University_HR_ManagementSystem_Team_58;
+﻿Screate database University_HR_ManagementSystem_Team_58;
 
 use University_HR_ManagementSystem_Team_58;
 
@@ -44,6 +44,65 @@ Return @Rate
 END;
 
 GO
+
+CREATE FUNCTION Overtime(@employee_ID INT)
+RETURNS DECIMAL(10,2)
+AS
+BEGIN
+    DECLARE @total_overtime DECIMAL(10,2);
+
+    SELECT @total_overtime = ISNULL(SUM(
+        IIF(DATEDIFF(MINUTE, check_in_time, check_out_time) > 480, 
+            CAST(DATEDIFF(MINUTE, check_in_time, check_out_time) - 480 AS DECIMAL(10,2)) / 60,
+            0)
+    ), 0)
+    FROM Attendance
+    WHERE emp_ID = @employee_ID
+      AND MONTH([date]) = MONTH(GETDATE())
+      AND YEAR([date]) = YEAR(GETDATE())
+      AND check_in_time IS NOT NULL
+      AND check_out_time IS NOT NULL
+      AND status = 'attended';
+
+    RETURN @total_overtime;
+END;
+
+GO
+
+
+
+CREATE FUNCTION Bonus_amount(@employee_ID int)
+RETURNS  Decimal(10,2) 
+AS
+BEGIN
+DECLARE @rate_per_hour Decimal(10,2),
+        @bonus_value Decimal(10,2),
+        @percentage_overtime decimal(4,2),
+        @extra_hours decimal(4,2)
+SET @rate_per_hour=dbo.Rate_per_hour(@employee_ID);
+SET @extra_hours=dbo.overtime(@employee_ID);
+ WITH HighestRankRole AS (
+        SELECT TOP 1 R.percentage_overtime
+        FROM Employee_Role ER
+        INNER JOIN Role R ON ER.role_name = R.role_name
+        INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
+        WHERE ER.emp_ID = @employee_ID
+        ORDER BY R.rank ASC 
+    )
+    SELECT @percentage_overtime = percentage_overtime
+    FROM HighestRankRole;
+    SET @bonus_value= @rate_per_hour*(@percentage_overtime*@extra_hours)
+        
+
+
+RETURN @bonus_value
+END ;
+
+GO
+
+drop function dbo.Bonus_amount
+
+go
 
 CREATE VIEW allEmployeeProfiles
 As
@@ -1007,7 +1066,7 @@ BEGIN
     DECLARE @deduction_amount DECIMAL(10,2);
     DECLARE @first_attendance_id INT;
 SELECT 
-    @MissingHours=(COUNT(*) * 8) - SUM(DATEDIFF(HOUR, '00:00:00', A.total_duration)) 
+    @MissingHours=(COUNT(*) * 8) - SUM(CAST(DATEDIFF(SECOND, '00:00:00', A.total_duration) AS DECIMAL(10,2)) / 3600.0) 
 FROM Attendance A
 WHERE A.emp_ID = @employee_ID 
     AND A.total_duration < '08:00:00' 
@@ -1037,4 +1096,90 @@ INSERT INTO Deduction (
         @first_attendance_id
     );
 
-END;
+END
+
+GO
+
+CREATE PROC Add_Payroll 
+@employee_ID INT,
+@from DATE,
+@to DATE
+AS
+BEGIN
+DECLARE @DEDS DECIMAL(10,2)
+DECLARE @BONUS DECIMAL(10,2)
+DECLARE @SALARY DECIMAL(10,2)
+DECLARE @TOTAL DECIMAL(10,2)
+SET @BONUS=dbo.Bonus_amount(@employee_ID)
+SELECT @DEDS=SUM(D.amount)
+FROM Deduction D
+WHERE D.date>=@from AND D.date<=@to AND D.status='pending' and d.emp_ID=@employee_ID
+
+UPDATE Deduction 
+SET status='finalized'
+WHERE date>=@from AND date<=@to AND status='pending' and emp_ID=@employee_ID
+
+set @SALARY=dbo.Salary(@employee_ID)
+
+
+
+SET @TOTAL=@BONUS+@SALARY-@DEDS
+INSERT INTO PAYROLL (payment_date,final_salary_amount,from_date,to_date,bonus_amount,deductions_amount,emp_ID) VALUES(
+GETDATE(),@TOTAL,@from,@to,@BONUS,@DEDS,@employee_ID)
+END
+GO
+
+drop proc Add_Payroll
+
+
+
+INSERT INTO Deduction (emp_ID,date,amount,status) values
+(1,'1/11/2025',50.0,'pending'),
+(1,'2/11/2025',127.2,'pending'),
+(1,'3/11/2025',222,'finalized');
+
+
+INSERT INTO Attendance (date, check_in_time, check_out_time, total_duration, status, emp_ID)
+VALUES
+('2025-11-10', '09:00', '18:00', '09:00', 'attended', 1),
+('2025-11-11', '09:15', '19:00', '10:45', 'attended', 1),
+('2025-11-12', '09:00', '17:00', '08:00', 'absent', 1);
+
+
+DECLARE @D DECIMAL(10,2)
+SET @D= dbo.Rate_per_hour(1)
+print @D;
+
+
+DECLARE @DD DECIMAL(10,2)
+SET @DD=dbo.Overtime(1)
+print @DD;
+
+DECLARE @DDD DECIMAL(10,2)
+SET @DDD=dbo.Bonus_amount(1)
+print @DDD;
+
+SELECT E.salary
+FROM Employee E
+WHERE E.employee_ID=1
+
+GO
+
+EXECUTE Add_Payroll @employee_id=1, @from='2025-1-1', @to='2025-11-30'
+
+GO
+
+
+select * from Deduction
+
+select * from Attendance
+
+SELECT * FROM Payroll
+
+SELECT TOP 1 R.percentage_overtime
+        FROM Employee_Role ER
+        INNER JOIN Role R ON ER.role_name = R.role_name
+        INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
+        WHERE ER.emp_ID = 1
+        ORDER BY R.rank ASC
+
