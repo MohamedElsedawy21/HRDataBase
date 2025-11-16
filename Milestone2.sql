@@ -1182,4 +1182,87 @@ SELECT TOP 1 R.percentage_overtime
         INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
         WHERE ER.emp_ID = 1
         ORDER BY R.rank ASC
+go
 
+CREATE FUNCTION Is_On_Leave(@employee_ID INT,@from DATE,@to DATE)
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @result BIT = 0;
+
+    IF EXISTS (
+        SELECT 1
+        FROM Annual_Leave al
+        INNER JOIN [Leave] l ON al.request_id = l.request_id
+        WHERE al.emp_id = @employee_ID
+          AND l.final_approval_status IN ('approved', 'pending')
+          AND l.start_date <= @to
+          AND l.end_date >= @from
+    )
+        SET @result = 1;
+
+    ELSE IF EXISTS (
+        SELECT 1
+        FROM Accidental_Leave al
+        INNER JOIN [Leave] l ON al.request_id = l.request_id
+        WHERE al.emp_id = @employee_ID
+          AND l.final_approval_status IN ('approved', 'pending')
+          AND l.start_date <= @to
+          AND l.end_date >= @from
+    )
+        SET @result = 1;
+
+    ELSE IF EXISTS (
+        SELECT 1
+        FROM Medical_Leave ml
+        INNER JOIN [Leave] l ON ml.request_id = l.request_id
+        WHERE ml.emp_id = @employee_ID
+          AND l.final_approval_status IN ('approved', 'pending')
+          AND l.start_date <= @to
+          AND l.end_date >= @from
+    )
+        SET @result = 1;
+
+    ELSE IF EXISTS (
+        SELECT 1
+        FROM Unpaid_Leave ul
+        INNER JOIN [Leave] l ON ul.request_id = l.request_id
+        WHERE ul.emp_id = @employee_ID
+          AND l.final_approval_status IN ('approved', 'pending')
+          AND l.start_date <= @to
+          AND l.end_date >= @from
+    )
+        SET @result = 1;
+
+    ELSE IF EXISTS (
+        SELECT 1
+        FROM Compensation_Leave cl
+        INNER JOIN [Leave] l ON cl.request_id = l.request_id
+        WHERE cl.emp_id = @employee_ID
+          AND l.final_approval_status IN ('approved', 'pending')
+          AND l.start_date <= @to
+          AND l.end_date >= @from
+    )
+        SET @result = 1;
+
+    RETURN @result;
+END;
+
+go
+
+CREATE PROC Update_Employment_Status 
+@Employee_ID INT
+AS 
+BEGIN
+DECLARE @ISONLEAVE BIT
+SET @ISONLEAVE=dbo.Is_On_Leave(@Employee_ID,GETDATE(),GETDATE())
+UPDATE Employee
+SET employment_status='onleave'
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=1
+
+UPDATE Employee
+SET employment_status='active'
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=0
+END
+
+GO
