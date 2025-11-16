@@ -1,4 +1,4 @@
-﻿Screate database University_HR_ManagementSystem_Team_58;
+﻿create database University_HR_ManagementSystem_Team_58;
 
 use University_HR_ManagementSystem_Team_58;
 
@@ -1279,5 +1279,44 @@ INSERT INTO Performance (rating,comments,semester,emp_ID) VALUES
 (@rating,@comment,@semester,@employee_ID)
 END
 
-
 GO
+
+CREATE PROC Upperboard_approve_annual
+@request_ID INT,
+@Upperboard_ID INT,
+@replacement_ID INT
+AS
+BEGIN
+DECLARE @ISONLEAVE BIT
+DECLARE @REPLACED_EMP INT
+DECLARE @EMP1_D VARCHAR(50)
+DECLARE @EMP2_D VARCHAR(50)
+DECLARE @START DATE
+DECLARE @END DATE
+
+SELECT @START=l.start_date,@END=l.end_date
+FROM leave l
+WHERE l.request_id=@request_ID
+
+SET @ISONLEAVE=dbo.Is_On_Leave(@replacement_ID,@START,@END)
+
+SELECT @REPLACED_EMP=al.emp_id
+FROM annual_leave al
+where al.request_id=@request_ID
+
+
+SELECT @EMP1_D=e.dept_name
+FROM Employee e
+WHERE e.employee_ID=@REPLACED_EMP
+
+SELECT @EMP2_D=e.dept_name
+FROM Employee e
+WHERE e.employee_ID=@replacement_ID
+
+if (@EMP1_D=@EMP2_D AND @ISONLEAVE=0)
+BEGIN 
+INSERT INTO Employee_Approve_Leave(Emp1_ID,Leave_ID,status) VALUES
+(@Upperboard_ID,@request_ID,'approved')
+END
+
+END
