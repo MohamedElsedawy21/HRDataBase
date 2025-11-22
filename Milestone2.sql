@@ -924,8 +924,26 @@ EXEC Remove_Deductions
 select* from deduction
 select*from employee
 drop procedure Remove_Deductions
+go
+--2.3 c 
 
---2.3 c missing
+CREATE PROC Update_Employment_Status 
+@Employee_ID INT
+AS 
+BEGIN
+DECLARE @ISONLEAVE BIT
+SET @ISONLEAVE=dbo.Is_On_Leave(@Employee_ID,GETDATE(),GETDATE())
+UPDATE Employee
+SET employment_status='onleave'
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=1
+
+UPDATE Employee
+SET employment_status='active'
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=0
+END
+
+GO
+
 
 
 
@@ -1440,23 +1458,6 @@ BEGIN
 END;
 
 go
-
-CREATE PROC Update_Employment_Status 
-@Employee_ID INT
-AS 
-BEGIN
-DECLARE @ISONLEAVE BIT
-SET @ISONLEAVE=dbo.Is_On_Leave(@Employee_ID,GETDATE(),GETDATE())
-UPDATE Employee
-SET employment_status='onleave'
-WHERE employee_ID=@Employee_ID and @ISONLEAVE=1
-
-UPDATE Employee
-SET employment_status='active'
-WHERE employee_ID=@Employee_ID and @ISONLEAVE=0
-END
-
-GO
 
 
 CREATE PROC Dean_andHR_Evaluation
