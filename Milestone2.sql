@@ -597,15 +597,32 @@ VALUES
 -- ==========================
 -- 2. Employee
 -- ==========================
-INSERT INTO Employee (first_name, last_name, email, password, address, gender, official_day_off, years_of_experience, national_ID, employment_status, type_of_contract, emergency_contact_name, emergency_contact_phone, annual_balance, accidental_balance, salary, hire_date, last_working_date, dept_name)
+INSERT INTO Employee (
+    first_name, last_name, email, password, address, gender, official_day_off,
+    years_of_experience, national_ID, employment_status, type_of_contract,
+    emergency_contact_name, emergency_contact_phone, annual_balance, accidental_balance,
+    salary, hire_date, last_working_date, dept_name
+)
 VALUES
-('John', 'Doe', 'john.doe@example.com', 'pass123', '123 Main St', 'M', 'Friday', 5, '1234567890123456', 'active', 'full_time', 'Jane Doe', '01234567890', 20, 5, 5000.00, '2020-01-15', NULL, 'IT'),
-('Alice', 'Smith', 'alice.smith@example.com', 'alice123', '456 Oak St', 'F', 'Monday', 3, '2345678901234567', 'active', 'part_time', 'Bob Smith', '09876543210', 15, 3, 3500.00, '2021-03-10', NULL, 'HR'),
-('Bob', 'Johnson', 'bob.johnson@example.com', 'bobpass', '789 Pine St', 'M', 'Wednesday', 7, '3456789012345678', 'active', 'full_time', 'Mary Johnson', '01122334455', 25, 7, 6000.00, '2019-06-20', NULL, 'Finance');
-INSERT INTO Employee (first_name, last_name, email, password, address, gender, official_day_off, years_of_experience, national_ID, employment_status, type_of_contract, emergency_contact_name, emergency_contact_phone, annual_balance, accidental_balance, salary, hire_date, last_working_date, dept_name)
+(
+    'John', 'Doe', 'john.doe@example.com', 'Pass@123', '123 Main St', 'M', 'Saturday',
+    5, '1234567890123456', 'active', 'full_time',
+    'Jane Doe', '01234567890', 20, 5,
+    50000.00, '2022-06-15', NULL, 'HR'
+);
+INSERT INTO Employee (
+    first_name, last_name, email, password, address, gender, official_day_off,
+    years_of_experience, national_ID, employment_status, type_of_contract,
+    emergency_contact_name, emergency_contact_phone, annual_balance, accidental_balance,
+    salary, hire_date, last_working_date, dept_name
+)
 VALUES
-('Michael', 'Brown', 'michael.brown@example.com', 'mikepass', '321 Cedar St', 'M', 'Thursday', 10, '4567890123456789', 'resigned', 'full_time', 'Laura Brown', '02233445566', 12, 4, 5500.00, '2018-02-01', '2024-08-15', 'Operations'),
-('Emma', 'Wilson', 'emma.wilson@example.com', 'emma987', '654 Spruce St', 'F', 'Sunday', 4, '5678901234567890', 'resigned', 'part_time', 'Chris Wilson', '03344556677', 18, 6, 3000.00, '2022-05-12', '2025-01-30', 'Marketing');
+(
+    'Alice', 'Smith', 'alice.smith@example.com', 'Alice@2025', '456 Oak Ave', 'F', 'Sunday',
+    3, '2345678901234567', 'onleave', 'part_time',
+    'Bob Smith', '09876543210', 15, 3,
+    30000.00, '2023-01-10', NULL, 'Finance'
+);
 
 
 -- ==========================
@@ -667,20 +684,39 @@ VALUES
 ('2025-11-01', '2025-11-10', '2025-11-12', 'approved'),
 ('2025-11-05', '2025-11-15', '2025-11-15', 'approved'),
 ('2025-11-03', '2025-11-20', '2025-11-22', 'pending');
+-- ==========================
+-- 7. Leave Requests (5 new leaves)
+-- ==========================
+INSERT INTO [Leave] (date_of_request, start_date, end_date, final_approval_status)
+VALUES
+('2025-11-10', '2025-12-01', '2025-12-05', 'approved'),     -- request_id = 4  (John Doe)
+('2025-11-11', '2025-12-10', '2025-12-12', 'pending'),      -- request_id = 5  (Alice Smith)
+('2025-11-12', '2025-12-15', '2025-12-16', 'approved'),     -- request_id = 6  (Bob Johnson)
+('2025-11-13', '2025-12-20', '2025-12-22', 'approved'),     -- request_id = 7  (Michael Brown)
+('2025-11-14', '2025-12-25', '2025-12-26', 'pending');      -- request_id = 8  (Emma Wilson)
 
 -- ==========================
 -- 8. Annual_Leave
 -- ==========================
 INSERT INTO Annual_Leave (request_id, emp_id, replacement_emp)
 VALUES
-(1, 1, 2);
+(1, 7, 8);
+INSERT INTO Annual_Leave (request_id, emp_id, replacement_emp)
+VALUES
+(10, 1, 2),
+(5, 2, 1);
+
 
 -- ==========================
 -- 9. Accidental_Leave
 -- ==========================
 INSERT INTO Accidental_Leave (request_id, emp_id)
 VALUES
-(2, 2);
+(2, 7);
+
+INSERT INTO Accidental_Leave (request_id, emp_id)
+VALUES
+(6, 1);
 
 -- ==========================
 -- 10. Medical_Leave
@@ -688,6 +724,10 @@ VALUES
 INSERT INTO Medical_Leave (request_id, insurance_status, disability_details, type, emp_id)
 VALUES
 (3, 1, 'None', 'sick', 3);
+INSERT INTO Medical_Leave (request_id, insurance_status, disability_details, type, emp_id)
+VALUES
+(7, 1, 'None', 'sick', 4);
+
 
 -- ==========================
 -- 11. Unpaid_Leave
@@ -701,6 +741,9 @@ VALUES
 INSERT INTO Compensation_Leave (request_id, reason, date_of_original_workday, emp_id, replacement_emp)
 VALUES
 (2, 'Extra work', '2025-11-25', 2, 1);
+INSERT INTO Compensation_Leave (request_id, reason, date_of_original_workday, emp_id, replacement_emp)
+VALUES
+(6, 'Worked extra hours during project deadline', '2025-11-28', 3, 1);
 
 -- ==========================
 -- 13. Document
@@ -730,44 +773,47 @@ VALUES
 -- ==========================
 INSERT INTO Payroll (payment_date, final_salary_amount, from_date, to_date, comments, bonus_amount, deductions_amount, emp_ID)
 VALUES
-('2025-11-30', 5000.00, '2025-11-01', '2025-11-30', 'Monthly salary', 200.00, 50.00, 1);
+('2025-12-1', 5000.00, '2025-11-01', '2025-11-30', 'Monthly salary', 200.00, 50.00, 1),
+
+('2025-11-30', 5000.00, '2025-10-01', '2025-10-30', 'Monthly salary', 200.00, 50.00, 1);
 
 -- ==========================
 -- 15. Attendance
 -- ==========================
 INSERT INTO Attendance (date, check_in_time, check_out_time, total_duration, status, emp_ID)
 VALUES
+('2025-11-1', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-2', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-3', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-4', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-5', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-6', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-7', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-8', '09:00', '17:00', '08:00', 'attended', 1),
+('2025-11-9', '09:00', '17:00', '08:00', 'attended', 1),
 ('2025-11-10', '09:00', '17:00', '08:00', 'attended', 1),
 ('2025-11-11', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-12', '09:00', '17:00', '08:00', 'absent', 1);
-INSERT INTO Attendance (date, check_in_time, check_out_time, total_duration, status, emp_ID)
-VALUES
--- John Doe (emp_ID = 1)
-('2025-11-10', '09:00:00', '17:00:00', '08:00:00', 'attended', 1),
-('2025-11-11', '09:05:00', '17:00:00', '07:55:00', 'attended', 1),
-('2025-11-12', NULL, NULL, '00:00:00', 'absent', 1),
-('2025-11-13', '09:00:00', '17:10:00', '08:10:00', 'attended', 1),
-('2025-11-14', '09:10:00', '17:00:00', '07:50:00', 'attended', 1),
-('2025-11-15', '09:00:00', '17:00:00', '08:00:00', 'attended', 1),
-('2025-11-16', NULL, NULL, '00:00:00', 'absent', 1),
+('2025-11-12', '09:00', '17:00', '08:00', 'absent', 1),
+('2025-11-13', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-14', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-15', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-16', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-17', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-18', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-19', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-20', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-21', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-22', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-23', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-24', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-25', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-26', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-27', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-28', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-29', '09:15', '17:00', '07:45', 'attended', 1),
+('2025-11-30', '09:15', '17:00', '07:45', 'attended', 1);
 
--- Alice Smith (emp_ID = 2)
-('2025-11-10', '08:55:00', '16:55:00', '08:00:00', 'attended', 2),
-('2025-11-11', NULL, NULL, '00:00:00', 'absent', 2),
-('2025-11-12', '09:10:00', '17:05:00', '07:55:00', 'attended', 2),
-('2025-11-13', '09:00:00', '17:00:00', '08:00:00', 'attended', 2),
-('2025-11-14', NULL, NULL, '00:00:00', 'absent', 2),
-('2025-11-15', '09:05:00', '17:10:00', '08:05:00', 'attended', 2),
-('2025-11-16', '09:00:00', '17:00:00', '08:00:00', 'attended', 2),
 
--- Bob Johnson (emp_ID = 3)
-('2025-11-10', '09:00:00', '17:00:00', '08:00:00', 'attended', 3),
-('2025-11-11', '09:00:00', '17:05:00', '08:05:00', 'attended', 3),
-('2025-11-12', '09:10:00', '17:00:00', '07:50:00', 'attended', 3),
-('2025-11-13', '09:00:00', '17:00:00', '08:00:00', 'attended', 3),
-('2025-11-14', '09:05:00', '17:10:00', '08:05:00', 'attended', 3),
-('2025-11-15', NULL, NULL, '00:00:00', 'absent', 3),
-('2025-11-16', '09:00:00', '17:00:00', '08:00:00', 'attended', 3);
 
 
 -- ==========================
@@ -854,7 +900,7 @@ as
 Update Document 
 Set status = 'expired'
 Where
-expiry_date >= CAST(GETDATE() AS DATE)
+expiry_date <= CAST(GETDATE() AS DATE)
 go
 
 EXEC Update_Status_Doc
@@ -899,9 +945,6 @@ create table Holiday
 exec Create_Holiday
 select* from holiday
 go
-
-
-
     --2.3 e
 
     CREATE PROCEDURE Add_Holiday
@@ -933,12 +976,11 @@ from Attendance a join employee e
 on a.emp_ID = e.employee_ID
 where DATENAME(WEEKDAY, a.date) = e.official_day_off
  go 
- exec Remove_DayOff  
+ exec Remove_DayOff @employee_id = 6
+ select* from Attendance
  go 
 
-
- --2.3 j
- 
+ --2.3 j 
   CREATE PROCEDURE Remove_Approved_Leaves
     @Employee_id INT
 AS
@@ -972,7 +1014,7 @@ AS
         
         UNION ALL
         
-        SELECT l.start_date, l.end_date, cl.emp_IDQ
+        SELECT l.start_date, l.end_date, cl.emp_ID
         FROM Leave l
         INNER JOIN Compensation_Leave cl ON l.request_ID = cl.request_ID
         WHERE l.final_approval_status = 'approved'
@@ -985,6 +1027,11 @@ AS
                                    AND a.emp_ID = al.emp_ID
     WHERE a.emp_ID = @Employee_id;
     
+     exec Remove_Approved_Leaves @Employee_id = 1
+     select* from attendance
+     select* from employee
+     select* from leave
+     select* from annual_leave
    GO
 
 
@@ -997,6 +1044,8 @@ AS
    as 
    insert into Employee_Replace_Employee (Emp1_ID , Emp2_ID, from_date ,to_date)
    values (  @Emp1_ID, @Emp2_ID , @from_date , @to_date )
+       PRINT 'Employee replacement inserted successfully';
+
 
    GO
 
