@@ -99,57 +99,59 @@ RETURN @bonus_value
 END ;
 
 GO
+--2.4a
+CREATE FUNCTION [HRLoginValidation]
+(
+    @employee_ID INT,
+    @password VARCHAR(50)
+)
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @login_successful BIT;
 
-drop function dbo.Bonus_amount
+    IF EXISTS (
+        SELECT *
+        FROM employee
+        WHERE employee_ID = @employee_ID
+          AND password = @password
+    )
+        SET @login_successful = 1 
+    ELSE
+        SET @login_successful = 0
+
+    RETURN @login_successful
+END
 
 go
 
-CREATE VIEW allEmployeeProfiles
-As
-SELECT employee_ID,first_name,last_name, gender, email, address, years_of_experience,
-official_day_off,type_of_contract,employment_status,
-annual_balance, accidental_balance
-FROM employee;
-
-
-GO
-
-CREATE VIEW NoEmployeeDept
-As 
-SELECT dept_name,count(employee_ID)
-FROM employee
-GROUP BY dept_name;
-
-GO
-
-CREATE VIEW allPerformance
-As 
-SELECT employee_ID,performance_ID,rating,comments,semester
-FROM performance
-where semester LIKE "W%";
-
-
-GO
-
-CREATE VIEW allRejectedMedicals
+--2.5 a
+  CREATE FUNCTION [EmployeeLoginValidation]
+(
+    @employee_ID INT,
+    @password VARCHAR(50)
+)
+RETURNS BIT
 AS
-SELECT M.Emp_ID,M.request_ID,M.insurance_status,M.disability_details,M.type,L.date_of_request,
-L.start_date,L.end_date,L.num_days,L.final_approval_status
-FROM Medical_Leave M,Leave L
-WHERE M.request_ID=L.request_ID AND L.final_approval_status='rejected';
+BEGIN
+    DECLARE @login_successful BIT;
+
+    IF EXISTS (
+        SELECT *
+        FROM employee
+        WHERE employee_ID = @employee_ID
+          AND password = @password
+    )
+        SET @login_successful = 1 
+    ELSE
+        SET @login_successful = 0
+
+    RETURN @login_successful
+END
+go 
 
 
-GO
-
-
-CREATE VIEW allEmployeeAttendance
-AS
-SELECT *
-FROM attendance
-WHERE date=DATEADD(DAY, -1, GETDATE());
-
-GO
-
+--2.1 b
 CREATE PROC createAllTables
 AS
 BEGIN
@@ -458,13 +460,8 @@ GO
 
 
 
--- Execute procedure
-EXEC createAllTables;
 
-DROP PROC createAllTables;
-
---2.1c
- 
+--2.1c 
 go
 CREATE PROC dropAllTables
 AS
@@ -489,10 +486,6 @@ Drop Table Employee
 Drop Table Department
 
 go 
-
-exec dropAllTables
-drop proc dropAllTables
-go
 --2.1 d
 
 CREATE PROC dropAllProceduresFunctionsViews
@@ -567,646 +560,353 @@ as
     DELETE FROM Employee;
     DELETE FROM Department;
 
+go
+--2.2a
+CREATE VIEW allEmployeeProfiles
+As
+SELECT employee_ID,first_name,last_name, gender, email, address, years_of_experience,
+official_day_off,type_of_contract,employment_status,
+annual_balance, accidental_balance
+FROM employee;
+
+
+GO
+--2.2b
+CREATE VIEW NoEmployeeDept
+As 
+SELECT dept_name,count(employee_ID)
+FROM employee
+GROUP BY dept_name;
+
+GO
+--2.2c
+CREATE VIEW allPerformance
+As 
+SELECT employee_ID,performance_ID,rating,comments,semester
+FROM performance
+where semester LIKE "W%";
+
+
+GO
+--2.2d
+CREATE VIEW allRejectedMedicals
+AS
+SELECT M.Emp_ID,M.request_ID,M.insurance_status,M.disability_details,M.type,L.date_of_request,
+L.start_date,L.end_date,L.num_days,L.final_approval_status
+FROM Medical_Leave M,Leave L
+WHERE M.request_ID=L.request_ID AND L.final_approval_status='rejected';
+
+
+GO
+
+--2.2e
+CREATE VIEW allEmployeeAttendance
+AS
+SELECT *
+FROM attendance
+WHERE date=DATEADD(DAY, -1, GETDATE());
+
+GO
+
+
+--2.3 a 
+CREATE PROC  Update_Status_Doc
+as 
+Update Document 
+Set status = 'expired'
+Where
+expiry_date <= CAST(GETDATE() AS DATE)
+go
+
+--2.3 b 
+CREATE PROC  Remove_Deductions
+as 
+DELETE d
+FROM deduction d WHERE d.emp_ID IN(
+select e.employee_ID
+from employee e
+where e.employment_status = 'resigned' )
+go
+
+--2.3 c 
+
+CREATE PROC Update_Employment_Status 
+@Employee_ID INT
+AS 
+BEGIN
+DECLARE @ISONLEAVE BIT
+SET @ISONLEAVE=dbo.Is_On_Leave(@Employee_ID,GETDATE(),GETDATE())
+UPDATE Employee
+SET employment_status='onleave'
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=1
+
+UPDATE Employee
+SET employment_status='active'
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=0
+END
+
+GO
+
+ --2.3 d
+ CREATE PROCEDURE Create_Holiday
+AS 
+create table Holiday 
+( holiday_id INT IDENTITY(1,1) PRIMARY KEY,
+        name VARCHAR(50),
+        from_date DATE ,
+        to_date DATE
+    )
+
+    go
+exec Create_Holiday
+select* from holiday
+go
+ --2.3 e
+
+    CREATE PROCEDURE Add_Holiday
+    @holiday_name VARCHAR(50),
+    @from_date DATE,
+    @to_date DATE
+AS
+INSERT INTO Holiday (name, from_date, to_date)
+    VALUES (@holiday_name, @from_date, @to_date)
+
+--2.3 f
+Go
+CREATE PROC Intitiate_Attendance
+AS
+    DECLARE @today DATE = GETDATE()
+    
+    -- Only insert records if they don't already exist for today
+    INSERT INTO Attendance(date, check_in_time, check_out_time, status, emp_ID)
+    SELECT @today, NULL, NULL, 'absent', e.employee_ID 
+    FROM Employee e
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM Attendance a 
+        WHERE a.emp_ID = e.employee_ID 
+        AND a.date = @today
+    )
+EXEC Intitiate_Attendance;
+SELECT emp_ID, date, check_in_time, check_out_time, status
+FROM Attendance
+WHERE date = CAST(GETDATE() AS DATE)
+ORDER BY emp_ID;
 
 go
-EXEC clearAllTables
-DROP PROC clearAllTables
+--2.3 g
+CREATE PROC Update_Attendance
+	@Employee_id INT,
+	@check_in TIME,
+	@check_out TIME
 
+	AS
+	DECLARE @today DATE = GETDATE()
+	UPDATE Attendance
+	SET check_in_time = @check_in,
+	    check_out_time = @check_out,
+	    status = 'attended'
+	WHERE (emp_ID = @Employee_id AND date = @today);
 
+go
 
-
-
-
-
-
-
---------MOCK DATA BASE-----------
--- ==========================
--- 1. Department
--- ==========================
-INSERT INTO Department (name, building_location)
-VALUES
-('HR', 'Building A'),
-('IT', 'Building B'),
-('Finance', 'Building C'),
-('Medical', 'Building D'),
-('MET', 'Building E'),
-('IET', 'Building F'),
-('Upper Board', 'Main Office');
-
--- ==========================
--- 2. Employee
--- ==========================
-INSERT INTO Employee (first_name, last_name, email, password, address, gender, official_day_off, years_of_experience, national_ID, employment_status, type_of_contract, emergency_contact_name, emergency_contact_phone, annual_balance, accidental_balance, salary, hire_date, last_working_date, dept_name)
-VALUES
-('John', 'Doe', 'john.doe@example.com', 'pass123', '123 Main St', 'M', 'Friday', 5, '1234567890123456', 'active', 'full_time', 'Jane Doe', '01234567890', 20, 5, 5000.00, '2020-01-15', NULL, 'IT'),
-('Alice', 'Smith', 'alice.smith@example.com', 'alice123', '456 Oak St', 'F', 'Monday', 3, '2345678901234567', 'active', 'part_time', 'Bob Smith', '09876543210', 15, 3, 3500.00, '2021-03-10', NULL, 'HR'),
-('Bob', 'Johnson', 'bob.johnson@example.com', 'bobpass', '789 Pine St', 'M', 'Wednesday', 7, '3456789012345678', 'active', 'full_time', 'Mary Johnson', '01122334455', 25, 7, 6000.00, '2019-06-20', NULL, 'Finance'),
-('High', 'Balance', 'high.balance@example.com', 'pass123', '111 High St', 'M', 'Friday', 10, '1111111111111111', 'active', 'full_time', 'Contact High', '01111111111', 30, 15, 8000.00, '2018-01-01', NULL, 'IT'),
-('Zero', 'Balance', 'zero.balance@example.com', 'pass123', '222 Zero St', 'F', 'Monday', 2, '2222222222222222', 'active', 'full_time', 'Contact Zero', '02222222222', 0, 0, 4000.00, '2023-01-01', NULL, 'HR'),
-('Low', 'Balance', 'low.balance@example.com', 'pass123', '333 Low St', 'M', 'Wednesday', 1, '3333333333333333', 'active', 'full_time', 'Contact Low', '03333333333', 2, 1, 3000.00, '2024-01-01', NULL, 'Finance');
--- ==========================
--- 3. Employee_Phone
--- ==========================
-INSERT INTO Employee_Phone (emp_ID, phone_num)
-VALUES
-(1, '01234567890'),
-(1, '09876543211'),
-(2, '09876543210'),
-(3, '01122334455');
-
--- ==========================
--- 4. Role
--- ==========================
-INSERT INTO Role (role_name, title, description, rank, base_salary, percentage_YOE, percentage_overtime, annual_balance, accidental_balance)
-VALUES
-('President', 'President', 'Head of the organization', 1, 10000.00, 5.0, 2.0, 30, 10),
-('Vice President', 'Vice President', 'Second in command', 2, 8000.00, 4.0, 1.5, 25, 8),
-('Dean_MET', 'Dean', 'Head of MET department', 3, 7000.00, 3.5, 1.5, 25, 7),
-('Vice Dean_MET', 'Vice Dean', 'Assistant to Dean', 4, 6000.00, 3.0, 1.2, 50, 5),
-('Lecturer_MET', 'Lecturer', 'Teaching faculty', 5, 4000.00, 2.5, 1.0, 20, 5),
-('TA_MET', 'Teaching Assistant', 'Assists lecturers', 6, 2500.00, 1.5, 0.8, 15, 3),
-('HR Manager', 'HR Manager', 'Manages HR department', 3, 6000.00, 3.5, 1.5, 25, 7),
-('HR Representative', 'HR Representative', 'Handles HR tasks', 4, 3500.00, 2.0, 1.0, 20, 5),
-('Medical Doctor', 'Medical Doctor', 'Provides medical services', NULL, 7000.00, 3.0, 1.2, 20, 5);
-
--- ==========================
--- 5. Employee_Role
--- ==========================
-INSERT INTO Employee_Role (emp_ID, role_name)
-VALUES
-(1, 'Lecturer_MET'),
-(1, 'TA_MET'),
-(2, 'HR Manager'),
-(2, 'Lecturer_MET'),
-(3, 'Medical Doctor');
-
--- ==========================
--- 6. Role_existsIn_Department
--- ==========================
-INSERT INTO Role_existsIn_Department (department_name, role_name)
-VALUES
-('MET', 'Dean_MET'),
-('MET', 'Vice Dean_MET'),
-('MET', 'Lecturer_MET'),
-('MET', 'TA_MET'),
-('HR', 'HR Manager'),
-('HR', 'HR Representative'),
-('Medical', 'Medical Doctor'),
-('Upper Board', 'President'),
-('Upper Board', 'Vice President');
-
--- ==========================
--- 7. Leave
--- ==========================
-INSERT INTO [Leave] (date_of_request, start_date, end_date, final_approval_status)
-VALUES
-('2025-11-01', '2025-11-10', '2025-11-12', 'approved'),
-('2025-11-05', '2025-11-15', '2025-11-15', 'approved'),
-('2025-11-03', '2025-11-20', '2025-11-22', 'pending');
--- ==========================
--- 7. Leave Requests (5 new leaves)
--- ==========================
-INSERT INTO [Leave] (date_of_request, start_date, end_date, final_approval_status)
-VALUES
-('2025-11-10', '2025-12-01', '2025-12-05', 'approved'),     -- request_id = 4  (John Doe)
-('2025-11-11', '2025-12-10', '2025-12-12', 'pending'),      -- request_id = 5  (Alice Smith)
-('2025-11-12', '2025-12-15', '2025-12-16', 'approved'),     -- request_id = 6  (Bob Johnson)
-('2025-11-13', '2025-12-20', '2025-12-22', 'approved'),     -- request_id = 7  (Michael Brown)
-('2025-11-14', '2025-12-25', '2025-12-26', 'pending');      -- request_id = 8  (Emma Wilson)
-
--- ==========================
--- 8. Annual_Leave
--- ==========================
-INSERT INTO Annual_Leave (request_id, emp_id, replacement_emp)
-VALUES
-(1, 7, 8);
-INSERT INTO Annual_Leave (request_id, emp_id, replacement_emp)
-VALUES
-(10, 1, 2),
-(5, 2, 1);
-
-
--- ==========================
--- 9. Accidental_Leave
--- ==========================
-INSERT INTO Accidental_Leave (request_id, emp_id)
-VALUES
-(2, 7);
-
-INSERT INTO Accidental_Leave (request_id, emp_id)
-VALUES
-(6, 1);
-
--- ==========================
--- 10. Medical_Leave
--- ==========================
-INSERT INTO Medical_Leave (request_id, insurance_status, disability_details, type, emp_id)
-VALUES
-(3, 1, 'None', 'sick', 3);
-
--- ==========================
--- 11. Unpaid_Leave
--- ==========================
-INSERT INTO Unpaid_Leave (request_id, emp_id)
-VALUES
-(3, 1);
-
--- ==========================
--- 12. Compensation_Leave
--- ==========================
-INSERT INTO Compensation_Leave (request_id, reason, date_of_original_workday, emp_id, replacement_emp)
-VALUES
-(2, 'Extra work', '2025-11-25', 2, 1);
-INSERT INTO Compensation_Leave (request_id, reason, date_of_original_workday, emp_id, replacement_emp)
-VALUES
-(6, 'Worked extra hours during project deadline', '2025-11-28', 3, 1);
-
--- ==========================
--- 13. Document
--- ==========================
-INSERT INTO Document (type, description, file_name, creation_date, expiry_date, status, emp_ID, medical_ID, unpaid_ID)
-VALUES
-('Medical', 'Sick certificate', 'doc1.pdf', '2025-11-01', '2025-12-01', 'valid', 3, 3, NULL),
-('Medical', 'Sick certificate', 'doc1.pdf', '2025-10-01', '2025-11-01', 'valid', 3, 3, NULL);
-
--- ==========================
--- 14. Payroll
--- ==========================
-INSERT INTO Payroll (payment_date, final_salary_amount, from_date, to_date, comments, bonus_amount, deductions_amount, emp_ID)
-VALUES
-('2025-12-1', 5000.00, '2025-11-01', '2025-11-30', 'Monthly salary', 200.00, 50.00, 1),
-
-('2025-11-30', 5000.00, '2025-10-01', '2025-10-30', 'Monthly salary', 200.00, 50.00, 1);
-
--- ==========================
--- 15. Attendance
--- ==========================
-INSERT INTO Attendance (date, check_in_time, check_out_time, total_duration, status, emp_ID)
-VALUES
-('2025-11-1', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-2', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-3', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-4', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-5', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-6', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-7', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-8', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-9', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-10', '09:00', '17:00', '08:00', 'attended', 1),
-('2025-11-11', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-12', '09:00', '17:00', '08:00', 'absent', 1),
-('2025-11-13', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-14', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-15', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-16', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-17', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-18', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-19', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-20', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-21', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-22', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-23', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-24', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-25', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-26', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-27', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-28', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-29', '09:15', '17:00', '07:45', 'attended', 1),
-('2025-11-30', '09:15', '17:00', '07:45', 'attended', 1);
-
-
-
-
--- ==========================
--- 16. Deduction
--- ==========================
-INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
-VALUES
-(1, '2025-11-12', 100.00, 'missing_hours', 'pending', NULL, 3);
--- Emma Wilson (emp_ID = 5)
-
-INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
-VALUES
-(5, '2025-11-08', 80.00, 'late_arrival', 'approved', NULL, 6),
-
-(5, '2025-10-29', 120.00, 'missing_hours', 'pending', NULL, 7),
-
-(5, '2025-09-15', 50.00, 'early_leave', 'approved', NULL, 8),
-
-(5, '2025-08-03', 200.00, 'no_show', 'pending', NULL, 9);
--- Deduction for Michael Brown (resigned employee, emp_ID = 4)
-INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
-VALUES
-(4, '2025-11-10', 150.00, 'missing_hours', 'pending', NULL, 5);
-INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
-VALUES
-(1, '2025-11-10', 120.00, 'missing_hours', 'pending', NULL, 1),
-(1, '2025-10-25', 60.00, 'late_arrival', 'approved', NULL, 2),
-(1, '2025-09-15', 200.00, 'no_show', 'pending', NULL, 3);
-
-INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
-VALUES
-(2, '2025-11-05', 45.00, 'late_arrival', 'approved', NULL, 4),
-(2, '2025-10-18', 90.00, 'early_leave', 'pending', NULL, 5),
-(2, '2025-09-30', 150.00, 'missing_hours', 'approved', NULL, 6);
-INSERT INTO Deduction (emp_ID, date, amount, type, status, unpaid_ID, attendance_ID)
-VALUES
-(3, '2025-11-01', 70.00, 'late_arrival', 'approved', NULL, 7),
-(3, '2025-10-20', 130.00, 'missing_hours', 'pending', NULL, 8),
-(3, '2025-08-29', 250.00, 'no_show', 'approved', NULL, 9);
-
-
--- ==========================
--- 17. Performance
--- ==========================
-INSERT INTO Performance (rating, comments, semester, emp_ID)
-VALUES
-(5, 'Excellent', 'F21', 1),
-(4, 'Good', 'F21', 2);
-
--- ==========================
--- 18. Employee_Replace_Employee
--- ==========================
-INSERT INTO Employee_Replace_Employee (Emp1_ID, Emp2_ID, from_date, to_date)
-VALUES
-(1, 2, '2025-11-10', '2025-11-12');
-
--- ==========================
--- 19. Employee_Approve_Leave
--- ==========================
-INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID, status)
-VALUES
-(2, 1, 'approved');
-GO
--- 2.4.B 
-CREATE PROC HR_approval_an_acc
-    @request_ID INT,
-    @HR_ID INT
+--2.3 h
+CREATE PROC Remove_Holiday
 AS
 BEGIN
-    DECLARE @emp_ID INT,
-            @annual_balance INT,
-            @accidental_balance INT,
-            @num_days INT,
-            @leave_type VARCHAR(20),
-            @approval_status VARCHAR(50)
+    DELETE a
+    FROM Attendance AS a
+    INNER JOIN Holiday AS h
+    ON a.date BETWEEN h.from_date AND h.to_date;
+END;
 
+SELECT * FROM Attendance;
+
+
+go
+--2.3 i 
+Create procedure Remove_DayOff
+@Employee_id int
+as 
+delete a 
+from Attendance a join employee e 
+on a.emp_ID = e.employee_ID
+where DATENAME(WEEKDAY, a.date) = e.official_day_off
+ go 
+ 
+ --2.3 j 
+  CREATE PROCEDURE Remove_Approved_Leaves
+    @Employee_id INT
+AS
+
+     WITH ApprovedLeaves AS (
+        SELECT l.start_date, l.end_date, al.emp_ID
+        FROM Leave l
+        INNER JOIN Annual_Leave al ON l.request_ID = al.request_ID
+        WHERE l.final_approval_status = 'approved'
+        
+        UNION ALL
+        
+        SELECT l.start_date, l.end_date, ac.emp_ID
+        FROM Leave l
+        INNER JOIN Accidental_Leave ac ON l.request_ID = ac.request_ID
+        WHERE l.final_approval_status = 'approved'
+        
+        UNION ALL
+        
+        SELECT l.start_date, l.end_date, ml.emp_ID
+        FROM Leave l
+        INNER JOIN Medical_Leave ml ON l.request_ID = ml.request_ID
+        WHERE l.final_approval_status = 'approved'
+        
+        UNION ALL
+        
+        SELECT l.start_date, l.end_date, ul.emp_ID
+        FROM Leave l
+        INNER JOIN Unpaid_Leave ul ON l.request_ID = ul.request_ID
+        WHERE l.final_approval_status = 'approved'
+        
+        UNION ALL
+        
+        SELECT l.start_date, l.end_date, cl.emp_ID
+        FROM Leave l
+        INNER JOIN Compensation_Leave cl ON l.request_ID = cl.request_ID
+        WHERE l.final_approval_status = 'approved'
+    )
     
-    IF EXISTS (SELECT 1 FROM Annual_Leave WHERE request_ID = @request_ID)
-        SET @leave_type = 'annual'
-    ELSE
-        SET @leave_type = 'accidental'
-  
-       
+    -- Delete attendance records with employee filtering only in WHERE clause
+    DELETE a
+    FROM attendance a
+    INNER JOIN ApprovedLeaves al ON a.date BETWEEN al.start_date AND al.end_date 
+                                   AND a.emp_ID = al.emp_ID
+    WHERE a.emp_ID = @Employee_id;
     
+     exec Remove_Approved_Leaves @Employee_id = 1
+     select* from attendance
+     select* from employee
+     select* from leave
+     select* from annual_leave
+   GO
 
-    SELECT @num_days = num_days 
-    FROM Leave 
-    WHERE request_ID = @request_ID
 
-    IF @leave_type = 'annual'
-    BEGIN
-      
-        SELECT @emp_ID = al.emp_ID, 
-               @annual_balance = e.annual_balance
-        FROM Annual_Leave al
-        INNER JOIN Employee e ON al.emp_ID = e.employee_ID
-        WHERE al.request_ID = @request_ID
+ --2.3k
+   create procedure Replace_employee
+   @Emp1_ID int,
+   @Emp2_ID int,
+   @from_date date,
+   @to_date date
+   as 
+   insert into Employee_Replace_Employee (Emp1_ID , Emp2_ID, from_date ,to_date)
+   values (  @Emp1_ID, @Emp2_ID , @from_date , @to_date )
+       PRINT 'Employee replacement inserted successfully';
 
-       
-        IF @annual_balance >= @num_days
-        BEGIN
-            SET @approval_status = 'Approved'
-         
-            UPDATE Employee 
-            SET annual_balance = annual_balance - @num_days 
-            WHERE employee_ID = @emp_ID
-        END
-        ELSE
-        BEGIN
-            SET @approval_status = 'Rejected'
-        END
-    END
-    ELSE IF @leave_type = 'accidental'
-    BEGIN
-        SELECT @emp_ID = al.emp_ID, 
-               @accidental_balance = e.accidental_balance
-        FROM Accidental_Leave al
-        INNER JOIN Employee e ON al.emp_ID = e.employee_ID
-        WHERE al.request_ID = @request_ID
 
-        IF @accidental_balance >= @num_days
-        BEGIN
-            SET @approval_status = 'Approved'
+   GO
 
-            UPDATE Employee 
-            SET accidental_balance = accidental_balance - @num_days 
-            WHERE employee_ID = @emp_ID
-        END
-        ELSE
-        BEGIN
-            SET @approval_status = 'Rejected'
-        END
-    END
-
-    UPDATE Leave 
-    SET final_approval_status = @approval_status 
-    WHERE request_ID = @request_ID
-
-END
-go 
-EXEC HR_approval_an_acc @request_ID = 4, @HR_ID = 2;
-
-SELECT employee_ID, annual_balance FROM Employee WHERE employee_ID = 9;
-SELECT * FROM [Leave] WHERE request_id = 4;
-
---2.4.C
-GO
-CREATE PROC HR_approval_unpaid
+--2.4 b,c
+--2.4.d
+CREATE PROC HR_approval_comp
     @request_ID INT, 
     @HR_ID INT
 AS
 BEGIN
-    DECLARE @annual_balance INT,
-            @emp_ID INT,
-            @num_days INT,
-            @approval_status VARCHAR(50)
+DECLARE 
+    @emp_id INT,
+    @orig_workDay DATE,
+    @reqDate DATE,
+    @reason VARCHAR(50),
+    @dayOff VARCHAR(50),
+    @req_status VARCHAR(50)
+
+SELECT 
+    @emp_id = cl.emp_ID,
+    @orig_workDay = cl.date_of_original_workday,
+    @reqDate = l.date_of_request,
+    @reason = cl.reason
+FROM compensation_leave cl
+JOIN leave l 
+ON l.request_id = cl.request_id
+WHERE cl.request_id = @request_ID;
 
 
-    SELECT @num_days = num_days
-    FROM Leave 
-    WHERE request_ID = @request_ID   
+SELECT @dayOff = e.official_day_off
+FROM Employee e
+WHERE e.employee_ID = @emp_id;
 
+DECLARE @check_in TIME, @check_out TIME;
+SELECT @check_in = a.check_in_time,
+       @check_out = a.check_out_time
+FROM Attendance a
+WHERE a.emp_ID = @emp_id AND a.date = @orig_workDay;
 
-    IF (@num_days > 30)
-    BEGIN
-        SET @approval_status = 'rejected'
-    END
-    ELSE
-    BEGIN
+DECLARE @total_duration TIME = dbo.fn_AttendanceTotalDuration(@check_in,@check_out)
+DECLARE @mins INT = CASE WHEN @total_duration IS NULL THEN NULL
+                    ELSE DATEDIFF(MINUTE, '00:00:00', @total_duration) 
+                    END;
 
-        SELECT 
-            @emp_ID = ul.emp_ID,
-            @annual_balance = e.annual_balance
-        FROM Unpaid_Leave ul
-        INNER JOIN Employee e 
-            ON ul.emp_ID = e.employee_ID
-        WHERE ul.request_ID = @request_ID
+ /* Rule checks */
+    DECLARE 
+        @worked_8h  BIT = CASE WHEN @mins IS NOT NULL AND @mins >= 480 THEN 1 ELSE 0 END,
+        @is_day_off BIT = CASE WHEN @dayOff IS NOT NULL AND DATENAME(WEEKDAY, @orig_workDay) = @dayOff THEN 1 ELSE 0 END,
+        @same_month BIT = CASE WHEN @reqDate IS NOT NULL AND DATEDIFF(MONTH, @reqDate, @orig_workDay) = 0 THEN 1 ELSE 0 END,
+        @has_reason BIT = CASE WHEN @reason IS NOT NULL THEN 1 ELSE 0 END;
 
-
-        IF (@annual_balance > 0)
-            SET @approval_status = 'rejected'
+        IF (@worked_8h = 1 AND @is_day_off = 1 AND @same_month = 1 AND @has_reason = 1)
+            SET @req_status = 'approved';
         ELSE
-            SET @approval_status = 'approved'
-    END
+            SET @req_status = 'rejected';
 
-  
-    UPDATE Leave 
-    SET final_approval_status = @approval_status 
-    WHERE request_ID = @request_ID
 
-END
-GO
-EXEC dbo.HR_approval_unpaid @request_ID = 3, @HR_ID = 2;
-SELECT * FROM Leave WHERE request_ID = 3;
-
--------
-GO
-CREATE FUNCTION Overtime(@employee_ID INT)
-RETURNS DECIMAL(10,2)
-AS
-BEGIN
-    RETURN (
-    SELECT ISNULL(SUM(
-          CASE 
-             WHEN DATEDIFF(HOUR, check_in_time, check_out_time) > 8 
-             THEN DATEDIFF(HOUR, check_in_time, check_out_time) - 8
-             ELSE 0
-            END
-        ), 0)
-
-        FROM ATTENDANCE 
-        WHERE 
-            emp_ID = @employee_ID
-            AND MONTH(date) = MONTH(GETDATE())
-            AND YEAR(date) = YEAR(GETDATE())
-            AND check_in_time IS NOT NULL
-            AND check_out_time IS NOT NULL
-            AND status = 'Present'
-    )
-END
------
-GO
-CREATE FUNCTION Salary(@emp_ID INT)
-
-RETURNS decimal(10,2)
-AS
-BEGIN
-    DECLARE @calculated_salary DECIMAL(10,2)=0;
-    
-    WITH HighestRankRole AS (
-        SELECT TOP 1 
-            R.base_salary,
-            R.percentage_YOE,
-            E.years_of_experience
-        FROM Employee_Role ER
-        INNER JOIN Role R ON ER.role_name = R.role_name
-        INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
-        WHERE ER.emp_ID = @emp_ID
-        ORDER BY R.rank ASC 
-    )
-    SELECT @calculated_salary = 
-        base_salary + 
-        (percentage_YOE / 100.0) * years_of_experience * base_salary
-    FROM HighestRankRole;
-
-    RETURN @calculated_salary;
+    UPDATE leave 
+    SET final_approval_status = @req_status
+    WHERE request_ID = @request_ID;
 END;
-----
-go
-CREATE Function Rate_per_hour(@employee_ID INT)
-RETURNS  Decimal(10,2) 
-AS
-BEGIN
-DECLARE @salary Decimal(10,2),
-        @Rate Decimal(10,2)
-SET @salary = dbo.salary(@employee_ID)
-SET @Rate= (@salary/22)/8
-Return @Rate
-END
 GO
---2.4.F
-CREATE PROC Deduction_days
+
+--2.4 e
+CREATE PROC Deduction_hours
 @employee_ID int
 AS
 BEGIN
-    DECLARE @rate_per_hour decimal(10,2),
-            @daily_deduction decimal(10,2)
+    DECLARE @MissingHours DECIMAL(10,2);
+    DECLARE @Emp_rate DECIMAL(10,2);
+    DECLARE @deduction_amount DECIMAL(10,2);
+    DECLARE @first_attendance_id INT;
+SELECT 
+    @MissingHours=(COUNT(*) * 8) - SUM(CAST(DATEDIFF(SECOND, '00:00:00', A.total_duration) AS DECIMAL(10,2)) / 3600.0) 
+FROM Attendance A
+WHERE A.emp_ID = @employee_ID 
+    AND A.total_duration < '08:00:00' 
+    AND MONTH(A.date) = MONTH(GETDATE())
+    AND YEAR(A.date) = YEAR(GETDATE());
 
-    SET @rate_per_hour = dbo.Rate_per_hour(@employee_ID)
-    SET @daily_deduction = @rate_per_hour * 8
+SELECT TOP 1 @first_attendance_id = A.attendance_ID
+    FROM Attendance A
+    WHERE A.emp_ID = @employee_ID 
+        AND A.total_duration < '08:00:00' 
+        AND MONTH(A.date) = MONTH(GETDATE())
+        AND YEAR(A.date) = YEAR(GETDATE())
+    ORDER BY A.date ASC;
 
-   
-    INSERT INTO Deduction (emp_ID, date, amount, type, status)
-    SELECT 
-        @employee_ID,
-        a.date,  
-        @daily_deduction,
-        'missing day',
-        'pending'
-    FROM ATTENDANCE a
-    WHERE 
-        a.emp_ID = @employee_ID
-        AND MONTH(a.date) = MONTH(GETDATE())
-        AND YEAR(a.date) = YEAR(GETDATE())
-        AND a.status = 'Absent'
-END
------
-GO
-CREATE FUNCTION Overtime(@employee_ID INT)
-RETURNS DECIMAL(10,2)
-AS
-BEGIN
-    DECLARE @total_overtime DECIMAL(10,2);
-
-    SELECT @total_overtime = ISNULL(SUM(
-        CASE 
-            WHEN DATEDIFF(MINUTE, check_in_time, check_out_time) > 480  
-            THEN CAST(DATEDIFF(MINUTE, check_in_time, check_out_time) - 480 AS DECIMAL(10,2)) / 60
-            ELSE 0
-        END
-    ), 0)
-    FROM Attendance
-    WHERE emp_ID = @employee_ID
-      AND MONTH([date]) = MONTH(GETDATE())
-      AND YEAR([date]) = YEAR(GETDATE())
-      AND check_in_time IS NOT NULL
-      AND check_out_time IS NOT NULL
-      AND status = 'attended';
-
-    RETURN @total_overtime;
-END;
-------
-GO
-CREATE FUNCTION Bonus_amount(@employee_ID int)
-RETURNS  Decimal(10,2) 
-AS
-BEGIN
-DECLARE @rate_per_hour Decimal(10,2),
-        @bonus_value Decimal(10,2),
-        @percentage_overtime decimal(4,2),
-        @extra_hours INT
-SET @rate_per_hour=Rate_per_hour(@employee_ID)
-SET @extra_hours=overtime(@employee_ID)
- WITH HighestRankRole AS (
-        SELECT TOP 1 
-            R.percentage_overtime
-        FROM Employee_Role ER
-        INNER JOIN Role R ON ER.role_name = R.role_name
-        INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
-        WHERE ER.emp_ID = @emp_ID
-        ORDER BY R.rank ASC 
-    )
-    SELECT @percentage_overtime = percentage_overtime
-    FROM HighestRankRole;
-
-    SET @bonus_value= @rate_per_hour*(@extra_hours/100)
-        
-
-
-RETURN @bonus_value
-
-
+IF @MissingHours IS NULL OR @MissingHours <= 0
+        RETURN;
+SELECT @Emp_rate = dbo.Rate_per_hour(@employee_ID);
+SET @deduction_amount = @Emp_rate * @MissingHours;
+INSERT INTO Deduction (
+        emp_ID, date, amount, type, status, attendance_ID
+    ) VALUES (
+        @employee_ID, 
+        GETDATE(), 
+        @deduction_amount, 
+        'missing_hours', 
+        'pending', 
+        @first_attendance_id
+    );
 
 END
-GO
-CREATE FUNCTION Overtime(@employee_ID INT)
-RETURNS DECIMAL(10,2)
-AS
-BEGIN
-    DECLARE @total_overtime DECIMAL(10,2);
-
-    SELECT @total_overtime = ISNULL(SUM(
-        CASE 
-            WHEN DATEDIFF(MINUTE, check_in_time, check_out_time) > 480  
-            THEN CAST(DATEDIFF(MINUTE, check_in_time, check_out_time) - 480 AS DECIMAL(10,2)) / 60
-            ELSE 0
-        END
-    ), 0)
-    FROM Attendance
-    WHERE emp_ID = @employee_ID
-      AND MONTH([date]) = MONTH(GETDATE())
-      AND YEAR([date]) = YEAR(GETDATE())
-      AND check_in_time IS NOT NULL
-      AND check_out_time IS NOT NULL
-      AND status = 'attended';
-
-    RETURN @total_overtime;
-END;
-GO
-------
-
-CREATE FUNCTION Bonus_amount(@employee_ID INT)
-RETURNS DECIMAL(10,2) 
-AS
-BEGIN
-    DECLARE @rate_per_hour DECIMAL(10,2),
-            @bonus_value DECIMAL(10,2),
-            @percentage_overtime DECIMAL(4,2),
-            @extra_hours DECIMAL(10,2)  
-
-    SET @rate_per_hour = dbo.Rate_per_hour(@employee_ID)
-    SET @extra_hours = dbo.Overtime(@employee_ID)
-
-    WITH HighestRankRole AS (
-        SELECT TOP 1 
-            R.percentage_overtime
-        FROM Employee_Role ER
-        INNER JOIN Role R ON ER.role_name = R.role_name
-        INNER JOIN Employee E ON ER.emp_ID = E.employee_ID
-        WHERE ER.emp_ID = @employee_ID  
-        ORDER BY R.rank ASC 
-    )
-    SELECT @percentage_overtime = ISNULL(percentage_overtime, 0)  
-    FROM HighestRankRole;
-
-    SET @bonus_value = @rate_per_hour * @extra_hours * (@percentage_overtime / 100.0)  
-
-    RETURN ISNULL(@bonus_value, 0)
-END
-GO
-
-CREATE FUNCTION Deductions_Attendance(@employee_ID INT, @month INT)
-RETURNS TABLE
-AS
-RETURN
-(
-    SELECT 
-        d.deduction_ID,
-        d.emp_ID,
-        e.first_name,
-        e.last_name,
-        d.date,
-        d.amount,
-        d.type,
-        d.status,
-        a.check_in_time,
-        a.check_out_time,
-        a.total_duration
-    FROM Deduction d
-    INNER JOIN Attendance a
-        ON d.attendance_ID = a.attendance_ID
-    INNER JOIN Employee e
-        ON d.emp_ID = e.employee_ID
-    WHERE d.emp_ID = @employee_ID
-      AND MONTH(d.date) = @month
-      AND d.type IN ('missing_hours', 'missing_days')  -- Attendance-related deductions
-);
-GO
-SELECT *
-FROM dbo.Deductions_Attendance(1, 11);
 go
+
+--2.4 f
 CREATE FUNCTION Is_On_Leave(@employee_ID INT,@from DATE,@to DATE)
 RETURNS BIT
 AS
@@ -1270,37 +970,237 @@ BEGIN
 
     RETURN @result;
 END;
-GO
-CREATE PROC Submit_annual
-@employee_ID int, 
-@replacement_emp int, 
-@start_date date, 
-@end_date date,
-@rank int
-AS 
-DECLARE 
-@LeaveRequestID int
+
+go
+
+ --2.4 g
+CREATE PROCEDURE Deduction_unpaid
+@employee_ID INT
+AS
 BEGIN
-SELECT @LeaveRequestID = request_ID
-FROM (
-    SELECT request_ID FROM Annual_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Accidental_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Medical_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Unpaid_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Compensation_Leave WHERE emp_ID = @EmployeeID
-) AS AllRequests ;
-insert into Employee_Approve_Leave (employee_ID, LeaveRequestID)
-select E.employee_ID
-from Employee E
-INNER JOIN Employee_Role ER ON E.employee_ID = ER.emp_ID
-INNER JOIN Role R ON ER.role_name = R.role_name
-where E.employee_ID.RANK=3
-
-end
+DECLARE @Start_date date;
+DECLARE @End_date date ;
+DECLARE @Emp_Dayrate Decimal(10,2);
+DECLARE @Ded_amount Decimal(10,2);
+DECLARE @Unpaid_ID INT;
+SET @Emp_Dayrate=dbo.Rate_per_hour(@employee_ID)*8
 
 
+SELECT @Unpaid_ID=ul.request_id,@Start_date=l.start_date,@End_date=l.end_date
+FROM unpaid_leave ul inner join leave l on(ul.request_id=l.request_id)
+WHERE ul.emp_id=@employee_ID and MONTH(GETDATE())=MONTH(l.start_date) and l.final_approval_status='approved'
 
+
+if @Unpaid_ID IS NULL
+BEGIN
+    RETURN;
+END
+
+if MONTH(@Start_date)=MONTH(@End_date)
+BEGIN
+
+SET @Ded_amount= (DATEDIFF(DAY, @Start_date, @End_date) + 1)*@Emp_Dayrate
+INSERT INTO Deduction (emp_ID,date,amount,type,status,unpaid_ID) VALUES(
+@employee_ID,
+GETDATE(),
+@Ded_amount,
+'unpaid',
+'pending',
+@Unpaid_ID
+)
+END
+
+
+ELSE
+
+BEGIN
+SET @Ded_amount= (DATEDIFF(DAY, @Start_date, EOMONTH(GETDATE())) + 1)*@Emp_Dayrate
+INSERT INTO Deduction (emp_ID,date,amount,type,status,unpaid_ID) VALUES(
+@employee_ID,
+GETDATE(),
+@Ded_amount,
+'unpaid',
+'pending',
+@Unpaid_ID
+)
+SET @Ded_amount= (DATEDIFF(DAY,DATEADD(DAY, 1 - DAY(@End_date), @End_date), @End_date)+1)*@Emp_Dayrate
+INSERT INTO Deduction (emp_ID,date,amount,type,status,unpaid_ID) VALUES(
+@employee_ID,
+GETDATE(),
+@Ded_amount,
+'unpaid',
+'pending',
+@Unpaid_ID
+)
+END
+
+
+END
+
+go
+
+
+GO
+--2.4 i
+CREATE PROC Add_Payroll 
+@employee_ID INT,
+@from DATE,
+@to DATE
+AS
+BEGIN
+DECLARE @DEDS DECIMAL(10,2)
+DECLARE @BONUS DECIMAL(10,2)
+DECLARE @SALARY DECIMAL(10,2)
+DECLARE @TOTAL DECIMAL(10,2)
+SET @BONUS=dbo.Bonus_amount(@employee_ID)
+SELECT @DEDS=SUM(D.amount)
+FROM Deduction D
+WHERE D.date>=@from AND D.date<=@to AND D.status='pending' and d.emp_ID=@employee_ID
+
+UPDATE Deduction 
+SET status='finalized'
+WHERE date>=@from AND date<=@to AND status='pending' and emp_ID=@employee_ID
+
+set @SALARY=dbo.Salary(@employee_ID)
+
+
+
+SET @TOTAL=@BONUS+@SALARY-@DEDS
+INSERT INTO PAYROLL (payment_date,final_salary_amount,from_date,to_date,bonus_amount,deductions_amount,emp_ID) VALUES(
+GETDATE(),@TOTAL,@from,@to,@BONUS,@DEDS,@employee_ID)
+END
+GO
+
+--2.5 o
+CREATE PROC Dean_andHR_Evaluation
+@employee_ID INT,
+@rating INT,
+@comment VARCHAR(50),
+@semester CHAR(3)
+AS 
+BEGIN
+INSERT INTO Performance (rating,comments,semester,emp_ID) VALUES 
+(@rating,@comment,@semester,@employee_ID)
+END
+
+GO
+--2.5 i
+CREATE PROC Upperboard_approve_annual
+@request_ID INT,
+@Upperboard_ID INT,
+@replacement_ID INT
+AS
+BEGIN
+DECLARE @ISONLEAVE BIT
+DECLARE @REPLACED_EMP INT
+DECLARE @EMP1_D VARCHAR(50)
+DECLARE @EMP2_D VARCHAR(50)
+DECLARE @START DATE
+DECLARE @END DATE
+
+SELECT @START=l.start_date,@END=l.end_date
+FROM leave l
+WHERE l.request_id=@request_ID
+
+SET @ISONLEAVE=dbo.Is_On_Leave(@replacement_ID,@START,@END)
+
+SELECT @REPLACED_EMP=al.emp_id
+FROM annual_leave al
+where al.request_id=@request_ID
+
+
+SELECT @EMP1_D=e.dept_name
+FROM Employee e
+WHERE e.employee_ID=@REPLACED_EMP
+
+SELECT @EMP2_D=e.dept_name
+FROM Employee e
+WHERE e.employee_ID=@replacement_ID
+
+if (@EMP1_D=@EMP2_D AND @ISONLEAVE=0)
+BEGIN 
+INSERT INTO Employee_Approve_Leave(Emp1_ID,Leave_ID,status) VALUES
+(@Upperboard_ID,@request_ID,'approved')
+END
+
+END  
+
+go
+
+--missing 2.4 b,c
+
+--2.5 b
+CREATE FUNCTION MyPerformance
+(@employee_ID int,
+@semester char(3)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+select * from Performance where emp_ID = @employee_ID AND semester = @semester
+)
+go
+select * from Performance
+select * from dbo.MyPerformance(1,'F21')
+go
+--2.5c
+CREATE FUNCTION MyAttendance
+(@employee_ID int)
+returns table 
+as 
+return
+(
+with fullmonth as(
+select *
+from attendance a 
+where a.emp_ID = @employee_ID AND MONTH(a.date) = MONTH(GETDATE())
+)
+select fm.attendance_ID,  fm.date, fm.check_in_time, fm.check_out_time, fm.total_duration, fm.status, fm.emp_ID
+from fullmonth fm inner join employee e 
+on fm.emp_ID = e.employee_ID 
+where DATENAME(WEEKDAY, fm.date) != e.official_day_off 
+)
+go 
+--2.5d 
+CREATE FUNCTION Last_month_payroll
+(@employee_ID int)
+returns table 
+as 
+return
+(
+SELECT * 
+FROM Payroll p
+where p.emp_ID = @employee_ID AND MONTH(p.from_date) = MONTH(DATEADD(MONTH, -1, GETDATE())) AND  MONTH(DATEADD(MONTH, -1, GETDATE()))= MONTH(p.to_date)
+)
+go
+
+--2.5 h
+CREATE FUNCTION Status_leaves 
+(@employee_ID int)
+returns table 
+as
+return
+(
+  WITH Leaves AS (
+        SELECT l.request_id, start_date, l.end_date,l.date_of_request,l.final_approval_status, al.emp_ID
+        FROM Leave l
+        INNER JOIN Annual_Leave al ON l.request_ID = al.request_ID
+        WHERE month(l.date_of_request) =  MONTH(GETDATE())
+
+        
+        UNION ALL
+        
+        SELECT l.request_id, l.start_date, l.end_date,l.date_of_request,l.final_approval_status, acc.emp_ID
+        FROM Leave l
+        INNER JOIN accidental_leave acc ON l.request_ID = acc.request_ID
+        WHERE month(l.date_of_request) =  MONTH(GETDATE()))
+        
+select le.request_id , le.date_of_request, le.final_approval_status
+from Leaves le
+where le.emp_id = @employee_ID 
+)
+go
+
+
+--missing 2.5 i-->n
