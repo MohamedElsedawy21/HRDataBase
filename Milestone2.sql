@@ -961,9 +961,74 @@ exec Add_Holiday @holiday_name= 'eid al fitr',
 @from_date = '2026-02-27',
     @to_date = '2026-03-3'
 
-    --2.3 f !!
-    --2.3 g !!
-    --2.3 h !!
+    --2.3 f
+Go
+CREATE PROC Intitiate_Attendance
+AS
+    DECLARE @today DATE = GETDATE()
+    
+    -- Only insert records if they don't already exist for today
+    INSERT INTO Attendance(date, check_in_time, check_out_time, status, emp_ID)
+    SELECT @today, NULL, NULL, 'absent', e.employee_ID 
+    FROM Employee e
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM Attendance a 
+        WHERE a.emp_ID = e.employee_ID 
+        AND a.date = @today
+    )
+EXEC Intitiate_Attendance;
+SELECT emp_ID, date, check_in_time, check_out_time, status
+FROM Attendance
+WHERE date = CAST(GETDATE() AS DATE)
+ORDER BY emp_ID;
+
+go
+--2.3 g
+CREATE PROC Update_Attendance
+	@Employee_id INT,
+	@check_in TIME,
+	@check_out TIME
+
+	AS
+	DECLARE @today DATE = GETDATE()
+	UPDATE Attendance
+	SET check_in_time = @check_in,
+	    check_out_time = @check_out,
+	    status = 'attended'
+	WHERE (emp_ID = @Employee_id AND date = @today);
+
+go
+
+EXEC Update_Attendance
+     @Employee_id = 4,
+     @check_in    = '10:00:00',
+     @check_out   = '18:30:00';
+SELECT * FROM Attendance
+WHERE date = CAST(GETDATE() AS DATE)
+ORDER BY emp_ID;
+
+
+go
+--2.3 h
+CREATE PROC Remove_Holiday
+AS
+BEGIN
+    DELETE a
+    FROM Attendance AS a
+    INNER JOIN Holiday AS h
+    ON a.date BETWEEN h.from_date AND h.to_date;
+END;
+
+SELECT * FROM Attendance;
+
+EXEC Remove_Holiday;
+
+SELECT * FROM Attendance
+ORDER BY Attendance.date;
+
+
+GO
 
 
 go
@@ -1050,6 +1115,64 @@ AS
    GO
 
 --2.4 a-->f
+--2.4.d
+CREATE PROC HR_approval_comp
+    @request_ID INT, 
+    @HR_ID INT
+AS
+BEGIN
+DECLARE 
+    @emp_id INT,
+    @orig_workDay DATE,
+    @reqDate DATE,
+    @reason VARCHAR(50),
+    @dayOff VARCHAR(50),
+    @req_status VARCHAR(50)
+
+SELECT 
+    @emp_id = cl.emp_ID,
+    @orig_workDay = cl.date_of_original_workday,
+    @reqDate = l.date_of_request,
+    @reason = cl.reason
+FROM compensation_leave cl
+JOIN leave l 
+ON l.request_id = cl.request_id
+WHERE cl.request_id = @request_ID;
+
+
+SELECT @dayOff = e.official_day_off
+FROM Employee e
+WHERE e.employee_ID = @emp_id;
+
+DECLARE @check_in TIME, @check_out TIME;
+SELECT @check_in = a.check_in_time,
+       @check_out = a.check_out_time
+FROM Attendance a
+WHERE a.emp_ID = @emp_id AND a.date = @orig_workDay;
+
+DECLARE @total_duration TIME = dbo.fn_AttendanceTotalDuration(@check_in,@check_out)
+DECLARE @mins INT = CASE WHEN @total_duration IS NULL THEN NULL
+                    ELSE DATEDIFF(MINUTE, '00:00:00', @total_duration) 
+                    END;
+
+ /* Rule checks */
+    DECLARE 
+        @worked_8h  BIT = CASE WHEN @mins IS NOT NULL AND @mins >= 480 THEN 1 ELSE 0 END,
+        @is_day_off BIT = CASE WHEN @dayOff IS NOT NULL AND DATENAME(WEEKDAY, @orig_workDay) = @dayOff THEN 1 ELSE 0 END,
+        @same_month BIT = CASE WHEN @reqDate IS NOT NULL AND DATEDIFF(MONTH, @reqDate, @orig_workDay) = 0 THEN 1 ELSE 0 END,
+        @has_reason BIT = CASE WHEN @reason IS NOT NULL THEN 1 ELSE 0 END;
+
+        IF (@worked_8h = 1 AND @is_day_off = 1 AND @same_month = 1 AND @has_reason = 1)
+            SET @req_status = 'approved';
+        ELSE
+            SET @req_status = 'rejected';
+
+
+    UPDATE leave 
+    SET final_approval_status = @req_status
+    WHERE request_ID = @request_ID;
+END;
+GO
 
 
 
