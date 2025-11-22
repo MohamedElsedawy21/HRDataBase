@@ -582,9 +582,9 @@ GO
 --2.2c
 CREATE VIEW allPerformance
 As 
-SELECT employee_ID,performance_ID,rating,comments,semester
+SELECT emp_ID,performance_ID,rating,comments,semester
 FROM performance
-where semester LIKE "W%";
+where semester LIKE 'W%';
 
 
 GO
@@ -804,6 +804,164 @@ AS
    GO
 
 --2.4 b,c
+-- 2.4.B 
+CREATE PROC HR_approval_an_acc
+    @request_ID INT,
+    @HR_ID INT
+AS
+BEGIN
+    DECLARE @emp_ID INT,
+            @annual_balance INT,
+            @accidental_balance INT,
+            @num_days INT,
+            @leave_type VARCHAR(20),
+            @approval_status VARCHAR(50)
+
+    
+    IF EXISTS (SELECT 1 FROM Annual_Leave WHERE request_ID = @request_ID)
+        SET @leave_type = 'annual'
+    ELSE
+        SET @leave_type = 'accidental'
+  
+       
+    
+
+    SELECT @num_days = num_days 
+    FROM Leave 
+    WHERE request_ID = @request_ID
+
+    IF @leave_type = 'annual'
+    BEGIN
+      
+        SELECT @emp_ID = al.emp_ID, 
+               @annual_balance = e.annual_balance
+        FROM Annual_Leave al
+        INNER JOIN Employee e ON al.emp_ID = e.employee_ID
+        WHERE al.request_ID = @request_ID
+
+       
+        IF @annual_balance >= @num_days
+        BEGIN
+            SET @approval_status = 'Approved'
+         
+            UPDATE Employee 
+            SET annual_balance = annual_balance - @num_days 
+            WHERE employee_ID = @emp_ID
+        END
+        ELSE
+        BEGIN
+            SET @approval_status = 'Rejected'
+        END
+    END
+    ELSE IF @leave_type = 'accidental'
+    BEGIN
+        SELECT @emp_ID = al.emp_ID, 
+               @accidental_balance = e.accidental_balance
+        FROM Accidental_Leave al
+        INNER JOIN Employee e ON al.emp_ID = e.employee_ID
+        WHERE al.request_ID = @request_ID
+
+        IF @accidental_balance >= @num_days
+        BEGIN
+            SET @approval_status = 'Approved'
+
+            UPDATE Employee 
+            SET accidental_balance = accidental_balance - @num_days 
+            WHERE employee_ID = @emp_ID
+        END
+        ELSE
+        BEGIN
+            SET @approval_status = 'Rejected'
+        END
+    END
+
+    UPDATE Leave 
+    SET final_approval_status = @approval_status 
+    WHERE request_ID = @request_ID
+
+END
+go 
+EXEC HR_approval_an_acc @request_ID = 4, @HR_ID = 2;
+
+SELECT employee_ID, annual_balance FROM Employee WHERE employee_ID = 9;
+SELECT * FROM [Leave] WHERE request_id = 4;
+
+--2.4.C
+GO
+CREATE PROC HR_approval_unpaid
+    @request_ID INT, 
+    @HR_ID INT
+AS
+BEGIN
+    DECLARE @annual_balance INT,
+            @emp_ID INT,
+            @num_days INT,
+            @approval_status VARCHAR(50)
+
+
+    SELECT @num_days = num_days
+    FROM Leave 
+    WHERE request_ID = @request_ID   
+
+
+    IF (@num_days > 30)
+    BEGIN
+        SET @approval_status = 'rejected'
+    END
+    ELSE
+    BEGIN
+
+        SELECT 
+            @emp_ID = ul.emp_ID,
+            @annual_balance = e.annual_balance
+        FROM Unpaid_Leave ul
+        INNER JOIN Employee e 
+            ON ul.emp_ID = e.employee_ID
+        WHERE ul.request_ID = @request_ID
+
+
+        IF (@annual_balance > 0)
+            SET @approval_status = 'rejected'
+        ELSE
+            SET @approval_status = 'approved'
+    END
+
+  
+    UPDATE Leave 
+    SET final_approval_status = @approval_status 
+    WHERE request_ID = @request_ID
+
+END
+GO
+EXEC dbo.HR_approval_unpaid @request_ID = 3, @HR_ID = 2;
+SELECT * FROM Leave WHERE request_ID = 3;
+
+-------
+GO
+CREATE FUNCTION Overtime(@employee_ID INT)
+RETURNS DECIMAL(10,2)
+AS
+BEGIN
+    RETURN (
+    SELECT ISNULL(SUM(
+          CASE 
+             WHEN DATEDIFF(HOUR, check_in_time, check_out_time) > 8 
+             THEN DATEDIFF(HOUR, check_in_time, check_out_time) - 8
+             ELSE 0
+            END
+        ), 0)
+
+        FROM ATTENDANCE 
+        WHERE 
+            emp_ID = @employee_ID
+            AND MONTH(date) = MONTH(GETDATE())
+            AND YEAR(date) = YEAR(GETDATE())
+            AND check_in_time IS NOT NULL
+            AND check_out_time IS NOT NULL
+            AND status = 'Present'
+    )
+END
+go
 --2.4.d
 CREATE PROC HR_approval_comp
     @request_ID INT, 
@@ -1129,6 +1287,7 @@ go
 
 --missing 2.4 b,c
 
+
 --2.5 b
 CREATE FUNCTION MyPerformance
 (@employee_ID int,
@@ -1202,5 +1361,143 @@ where le.emp_id = @employee_ID
 )
 go
 
+--2.5 i
+CREATE PROC Upperboard_approve_annual
+@request_ID INT,
+@Upperboard_ID INT,
+@replacement_ID INT
+AS
+BEGIN
+DECLARE @ISONLEAVE BIT
+DECLARE @REPLACED_EMP INT
+DECLARE @EMP1_D VARCHAR(50)
+DECLARE @EMP2_D VARCHAR(50)
+DECLARE @START DATE
+DECLARE @END DATE
 
---missing 2.5 i-->n
+SELECT @START=l.start_date,@END=l.end_date
+FROM leave l
+WHERE l.request_id=@request_ID
+
+SET @ISONLEAVE=dbo.Is_On_Leave(@replacement_ID,@START,@END)
+
+SELECT @REPLACED_EMP=al.emp_id
+FROM annual_leave al
+where al.request_id=@request_ID
+
+
+SELECT @EMP1_D=e.dept_name
+FROM Employee e
+WHERE e.employee_ID=@REPLACED_EMP
+
+SELECT @EMP2_D=e.dept_name
+FROM Employee e
+WHERE e.employee_ID=@replacement_ID
+
+if (@EMP1_D=@EMP2_D AND @ISONLEAVE=0)
+BEGIN 
+INSERT INTO Employee_Approve_Leave(Emp1_ID,Leave_ID,status) VALUES
+(@Upperboard_ID,@request_ID,'approved')
+END
+
+END
+--missing 2.5 j-->n
+
+GO
+--2.5 k
+CREATE PROC Submit_medical
+@employee_ID int, 
+@start_date date, 
+@end_date date, 
+@type varchar(50), 
+@insurance_status bit,
+@disability_details varchar(50),
+@document_description varchar(50), 
+@file_name varchar(50)
+AS
+BEGIN
+DECLARE @LEAVE_ID INT
+DECLARE @EMP_CONTRACT varchar(50)
+DECLARE @gender char(1)
+
+select @EMP_CONTRACT=e.type_of_contract, @gender=e.gender
+from Employee e
+where e.employee_ID=@employee_ID
+
+if (@EMP_CONTRACT='part_time' and @type='maternity')or(@gender='F')
+begin
+print ('cant apply for maternity leave as a part time employee')
+return;
+end
+
+INSERT INTO  [Leave] (date_of_request,start_date,end_date) 
+VALUES (GETDATE(),@start_date,@end_date);
+
+SET @LEAVE_ID= SCOPE_IDENTITY()
+
+INSERT INTO medical_leave(request_ID,insurance_status,disability_details,type,emp_ID) 
+VALUES(@LEAVE_ID,@insurance_status,@disability_details,@type,@employee_ID);
+
+INSERT INTO Document(type,description,file_name,creation_date,emp_ID,medical_ID)
+VALUES('medical report',@document_description,@file_name,GETDATE(),@employee_ID,@LEAVE_ID);
+
+with empaprove as (select emp_ID
+from Employee_Role er inner join [role] r
+on r.role_name= er.role_name
+where (r.role_name = 'HR Representative') or (r.role_name='Medical Doctor'))
+
+
+INSERT INTO  Employee_Approve_Leave (Emp1_ID,leave_ID)
+SELECT empaprove.emp_ID, @LEAVE_ID
+FROM empaprove
+
+
+END
+
+GO
+--2.5 M
+CREATE PROC Submit_compensation
+@employee_ID int,
+@compensation_date date, 
+@reason varchar(50), 
+@date_of_original_workday date, 
+@replacement_emp int
+AS
+BEGIN
+DECLARE @Timespent TIME
+DECLARE @LEAVE_ID INT
+
+SELECT @Timespent=a.total_duration
+FROM Attendance a
+WHERE a.date=@date_of_original_workday and a.emp_ID=@employee_ID
+
+if (@Timespent<'08:00:00' )OR (MONTH(@compensation_date)<>MONTH(@date_of_original_workday))
+BEGIN
+print('didnt work full day(8 hours) or month of compensation date isnt month of extra day')
+END
+
+INSERT INTO  [Leave] (date_of_request,start_date,end_date) 
+VALUES (GETDATE(),@compensation_date,@compensation_date);
+
+SET @LEAVE_ID= SCOPE_IDENTITY()
+
+INSERT INTO compensation_leave(request_ID,reason,date_of_original_workday,emp_ID,replacement_emp)
+VALUES(@LEAVE_ID,@reason,@date_of_original_workday,@employee_ID,@replacement_emp)
+
+INSERT INTO Employee_Replace_Employee(Emp1_ID,Emp2_ID,from_date,to_date)
+VALUES(@employee_ID,@replacement_emp,@compensation_date,@compensation_date)
+
+with empaprove as (select emp_ID
+from Employee_Role er inner join [role] r
+on r.role_name= er.role_name
+where r.role_name = 'HR Representative')
+
+
+INSERT INTO  Employee_Approve_Leave (Emp1_ID,leave_ID)
+SELECT empaprove.emp_ID, @LEAVE_ID
+FROM empaprove
+
+END
+
+
+GO
