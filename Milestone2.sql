@@ -44,7 +44,7 @@ Return @Rate
 END;
 
 GO
-
+--2.4h
 CREATE FUNCTION Overtime(@employee_ID INT)
 RETURNS DECIMAL(10,2)
 AS
@@ -69,7 +69,7 @@ END;
 
 GO
 
-
+--2.4h
 
 CREATE FUNCTION Bonus_amount(@employee_ID int)
 RETURNS  Decimal(10,2) 
@@ -183,7 +183,7 @@ BEGIN
         emergency_contact_phone CHAR(11), 
         annual_balance INT, 
         accidental_balance INT,
-        salary DECIMAL(10,2), 
+        salary AS (dbo.Salary(employee_ID)), 
         hire_date DATE, 
         last_working_date DATE, 
         dept_name VARCHAR(50),
@@ -380,7 +380,7 @@ BEGIN
         date DATE, 
         check_in_time TIME,
         check_out_time TIME, 
-        total_duration TIME, 
+        total_duration AS DATEADD(SECOND, DATEDIFF(SECOND, check_in_time, check_out_time), '00:00:00'), 
         status VARCHAR(50) DEFAULT 'absent'
             CHECK (status IN ('attended', 'absent')), 
         emp_ID INT,
@@ -848,7 +848,7 @@ VALUES
 
 go
 
---2.2 a 
+--2.3 a 
 CREATE PROC  Update_Status_Doc
 as 
 Update Document 
@@ -860,7 +860,7 @@ go
 EXEC Update_Status_Doc
 select * from Document
 
---2.2 b 
+--2.3 b 
 go
 
 CREATE PROC  Remove_Deductions
@@ -871,15 +871,21 @@ select e.employee_ID
 from employee e
 where e.employment_status = 'resigned' )
 go
+
+
+
 EXEC Remove_Deductions
 select* from deduction
 select*from employee
 drop procedure Remove_Deductions
 
---c missing
+--2.3 c missing
+
+
+
 
 go
- --2.2 d
+ --2.3 d
  CREATE PROCEDURE Create_Holiday
 AS 
 create table Holiday 
@@ -893,7 +899,10 @@ create table Holiday
 exec Create_Holiday
 select* from holiday
 go
-    --2.2 e
+
+
+
+    --2.3 e
 
     CREATE PROCEDURE Add_Holiday
     @holiday_name VARCHAR(50),
@@ -909,11 +918,13 @@ exec Add_Holiday @holiday_name= 'eid al fitr',
 @from_date = '2026-02-27',
     @to_date = '2026-03-3'
 
-
+    --2.3 f !!
+    --2.3 g !!
+    --2.3 h !!
 
 
 go
---2.2 i 
+--2.3 i 
 Create procedure Remove_DayOff
 @Employee_id int
 as 
@@ -925,6 +936,8 @@ where DATENAME(WEEKDAY, a.date) = e.official_day_off
  exec Remove_DayOff  
  go 
 
+
+ --2.3 j
  
   CREATE PROCEDURE Remove_Approved_Leaves
     @Employee_id INT
@@ -974,6 +987,8 @@ AS
     
    GO
 
+
+ --2.3k
    create procedure Replace_employee
    @Emp1_ID int,
    @Emp2_ID int,
@@ -983,13 +998,13 @@ AS
    insert into Employee_Replace_Employee (Emp1_ID , Emp2_ID, from_date ,to_date)
    values (  @Emp1_ID, @Emp2_ID , @from_date , @to_date )
 
-   go
+   GO
 
-GO
+--2.4 a-->f
 
 
-GO
 
+ --2.4 g
 CREATE PROCEDURE Deduction_unpaid
 @employee_ID INT
 AS
@@ -1055,8 +1070,10 @@ END
 
 go
 
+--2.4 f
 
 
+--2.4 e
 CREATE PROC Deduction_hours
 @employee_ID int
 AS
@@ -1099,7 +1116,7 @@ INSERT INTO Deduction (
 END
 
 GO
-
+--2.4 i
 CREATE PROC Add_Payroll 
 @employee_ID INT,
 @from DATE,
@@ -1184,6 +1201,8 @@ SELECT TOP 1 R.percentage_overtime
         ORDER BY R.rank ASC
 go
 
+
+--2.5 f
 CREATE FUNCTION Is_On_Leave(@employee_ID INT,@from DATE,@to DATE)
 RETURNS BIT
 AS
