@@ -678,7 +678,7 @@ BEGIN
             AND status = 'Present'
     )
 END
------
+-----helper function
 GO
 CREATE FUNCTION Salary(@emp_ID INT)
 
@@ -705,7 +705,7 @@ BEGIN
 
     RETURN @calculated_salary;
 END;
-----
+----helper function
 go
 CREATE Function Rate_per_hour(@employee_ID INT)
 RETURNS  Decimal(10,2) 
@@ -769,7 +769,7 @@ BEGIN
 
     RETURN @total_overtime;
 END;
-------
+------2.4.h
 GO
 CREATE FUNCTION Bonus_amount(@employee_ID int)
 RETURNS  Decimal(10,2) 
@@ -803,6 +803,8 @@ RETURN @bonus_value
 
 END
 GO
+
+------helper function
 CREATE FUNCTION Overtime(@employee_ID INT)
 RETURNS DECIMAL(10,2)
 AS
@@ -828,7 +830,7 @@ BEGIN
 END;
 GO
 ------
-
+-----2.4.h
 CREATE FUNCTION Bonus_amount(@employee_ID INT)
 RETURNS DECIMAL(10,2) 
 AS
@@ -858,7 +860,7 @@ BEGIN
     RETURN ISNULL(@bonus_value, 0)
 END
 GO
-
+----2.5.e
 CREATE FUNCTION Deductions_Attendance(@employee_ID INT, @month INT)
 RETURNS TABLE
 AS
@@ -883,12 +885,13 @@ RETURN
         ON d.emp_ID = e.employee_ID
     WHERE d.emp_ID = @employee_ID
       AND MONTH(d.date) = @month
-      AND d.type IN ('missing_hours', 'missing_days')  -- Attendance-related deductions
+      AND d.type IN ('missing_hours', 'missing_days') 
 );
 GO
 SELECT *
 FROM dbo.Deductions_Attendance(1, 11);
 go
+----2.5.f
 CREATE FUNCTION Is_On_Leave(@employee_ID INT,@from DATE,@to DATE)
 RETURNS BIT
 AS
@@ -953,36 +956,31 @@ BEGIN
     RETURN @result;
 END;
 GO
+----2.5.g
 CREATE PROC Submit_annual
-@employee_ID int, 
-@replacement_emp int, 
-@start_date date, 
-@end_date date,
-@rank int
-AS 
-DECLARE 
-@LeaveRequestID int
+    @employee_ID       INT,
+    @replacement_emp   INT,
+    @start_date        DATE,
+    @end_date          DATE,
+    @rank              INT
+AS
 BEGIN
-SELECT @LeaveRequestID = request_ID
-FROM (
-    SELECT request_ID FROM Annual_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Accidental_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Medical_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Unpaid_Leave WHERE emp_ID = @EmployeeID
-    UNION ALL
-    SELECT request_ID FROM Compensation_Leave WHERE emp_ID = @EmployeeID
-) AS AllRequests ;
-insert into Employee_Approve_Leave (employee_ID, LeaveRequestID)
-select E.employee_ID
-from Employee E
-INNER JOIN Employee_Role ER ON E.employee_ID = ER.emp_ID
-INNER JOIN Role R ON ER.role_name = R.role_name
-where E.employee_ID.RANK=3
+    DECLARE @LeaveRequestID INT;
 
-end
+    INSERT INTO [Leave] (date_of_request, start_date, end_date)
+    VALUES (GETDATE(), @start_date, @end_date);
 
+    SET @LeaveRequestID = SCOPE_IDENTITY();
 
+    INSERT INTO Annual_Leave (request_id, emp_id, replacement_emp)
+    VALUES (@LeaveRequestID, @employee_ID, @replacement_emp);
+
+    INSERT INTO Employee_Approve_Leave (Emp1_ID, Leave_ID)
+    SELECT E.employee_ID, @LeaveRequestID
+    FROM Employee AS E
+    INNER JOIN Employee_Role ER ON ER.emp_ID = E.employee_ID
+    INNER JOIN Role R ON R.role_name = ER.role_name
+    WHERE R.rank = 3;
+END;
+GO
 
