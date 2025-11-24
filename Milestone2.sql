@@ -257,7 +257,7 @@ BEGIN
         date_of_request DATE,
         start_date DATE,
         end_date DATE,
-        num_days AS DATEDIFF(DAY, start_date, end_date),
+        num_days AS (DATEDIFF(DAY, start_date, end_date)+1),
         final_approval_status VARCHAR(50)
             CONSTRAINT DF_LeaveStatus DEFAULT 'pending'
             CONSTRAINT CK_LeaveStatus CHECK (final_approval_status IN ('rejected', 'pending','approved'))
@@ -431,11 +431,12 @@ BEGIN
     -- Employee Replace Employee
     -- ==========================
     CREATE TABLE Employee_Replace_Employee (
+        Table_ID INT IDENTITY (1,1),
         Emp1_ID INT,
         Emp2_ID INT,
         from_date DATE,
         to_date DATE,
-        PRIMARY KEY (Emp1_ID, Emp2_ID),
+        PRIMARY KEY (Table_ID,Emp1_ID, Emp2_ID),
         FOREIGN KEY (Emp1_ID) REFERENCES Employee(employee_ID)
             ON DELETE CASCADE,
         FOREIGN KEY (Emp2_ID) REFERENCES Employee(employee_ID)
@@ -458,7 +459,7 @@ BEGIN
 END;
 GO
 
-
+exec createAllTables
 
 
 --2.1c 
@@ -498,6 +499,7 @@ drop view NoEmployeeDept
 drop view allPerformance
 drop view allRejectedMedicals
 drop view allEmployeeAttendance
+drop proc Update_Status_Doc
 drop procedure allEmployeeAttendance
 drop procedure Remove_Deductions
 drop procedure Update_Employment_Status
@@ -519,13 +521,13 @@ drop procedure Deduction_unpaid
 drop function Bonus_amount
 drop procedure Add_Payroll
 drop function EmployeeLoginValidation
-drop function MyPerformance --table valued function
-drop function MyAttendance --table valued function
-drop function Last_month_payroll--table valued function
-drop function Deductions_Attendance --table valued function
+drop function MyPerformance 
+drop function MyAttendance 
+drop function Last_month_payroll
+drop function Deductions_Attendance 
 drop function Is_On_Leave
 drop procedure Submit_annual
-drop function Status_leaves --table valued function
+drop function Status_leaves 
 drop procedure Upperboard_approve_annual
 drop procedure Submit_accidental
 drop procedure Submit_medical
@@ -535,7 +537,6 @@ drop procedure Submit_compensation
 drop procedure Dean_andHR_Evaluation
 
 go 
-
 --2.1 e
 CREATE PROC clearAllTables
 as
@@ -608,7 +609,6 @@ WHERE date=DATEADD(DAY, -1, GETDATE());
 
 GO
 
-
 --2.3 a 
 CREATE PROC  Update_Status_Doc
 as 
@@ -638,11 +638,11 @@ DECLARE @ISONLEAVE BIT
 SET @ISONLEAVE=dbo.Is_On_Leave(@Employee_ID,GETDATE(),GETDATE())
 UPDATE Employee
 SET employment_status='onleave'
-WHERE employee_ID=@Employee_ID and @ISONLEAVE=1
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=1 and employment_status='active'
 
 UPDATE Employee
 SET employment_status='active'
-WHERE employee_ID=@Employee_ID and @ISONLEAVE=0
+WHERE employee_ID=@Employee_ID and @ISONLEAVE=0 and employment_status='onleave'
 END
 
 GO
@@ -798,7 +798,6 @@ AS
    as 
    insert into Employee_Replace_Employee (Emp1_ID , Emp2_ID, from_date ,to_date)
    values (  @Emp1_ID, @Emp2_ID , @from_date , @to_date )
-       PRINT 'Employee replacement inserted successfully';
 
 
    GO
