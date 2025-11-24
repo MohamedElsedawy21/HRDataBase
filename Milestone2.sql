@@ -347,6 +347,8 @@ BEGIN
         Emp1_ID INT, 
         Leave_ID INT, 
         status VARCHAR(50),
+        CONSTRAINT CK_status CHECK (status IN ('rejected', 'pending','approved')),
+
         PRIMARY KEY (Emp1_ID, Leave_ID),
         FOREIGN KEY (Leave_ID) REFERENCES [leave](request_id)
             ON DELETE CASCADE,
@@ -1087,4 +1089,316 @@ select* from leave
 select* from annual_leave
 select* from accidental_leave
 select* from Employee
+go
+--nourhan ---
+-- j: Submit_accidental 
 
+
+CREATE PROCEDURE Submit_accidental
+    @employee_ID INT,
+    @start_date DATE,
+    @end_date DATE
+AS
+
+IF  @start_date = @end_date AND DATEDIFF(DAY, GETDATE(), @start_date) >= 2
+
+BEGIN
+insert into leave (date_of_request,start_date, end_date)
+values(GETDATE(), @start_date,@end_date );
+DECLARE @reqid INT = SCOPE_IDENTITY();
+insert into Accidental_Leave (request_ID,emp_ID)
+values(@reqid,@employee_ID);
+
+with ss as (select emp_ID
+from Employee_Role er inner join [role] r
+on r.role_name= er.role_name
+where r.rank = 4 and r.role_name = 'HR Representative')
+
+INSERT INTO  Employee_Approve_Leave (Emp1_ID,leave_ID)
+SELECT ss.emp_ID, @reqid
+FROM ss
+ 
+END
+
+else
+
+begin
+print 'cannot apply for an accidental leave for more than one day or less than 48 hours in advance'
+end
+
+
+
+insert into Employee_role
+values(8,'HR Representative');
+insert into [Role](role_name,[rank])
+values('HR Representative',4);
+exec Submit_accidental @employee_ID = 7, @start_date = '2025-11-22', @end_date = '2025-11-22';
+exec Submit_accidental @employee_ID = 8, @start_date = '2025-11-23', @end_date = '2025-11-23';
+exec Submit_accidental @employee_ID = 8, @start_date = '2025-11-25', @end_date = '2025-11-25';
+
+go
+
+---------------------------------------------
+
+
+---------------------
+
+--L: Submit_unpaid
+
+CREATE PROCEDURE Submit_unpaid
+    @employee_ID INT,
+    @start_date DATE,
+    @end_date DATE,
+    @document_description VARCHAR(50),
+    @file_name VARCHAR(50)
+AS
+DECLARE @EMP_CONTRACT varchar(50)
+DECLARE @role varchar(50)
+DECLARE @leaveCount int
+DECLARE @emp_rank int
+declare @current_emp_id int =1
+DECLARE @approver_rank int
+declare @annualbalance int
+declare @req_id int
+
+select @annualbalance = e.annual_balance 
+from employee e
+where e.employee_ID = @employee_ID
+
+select @EMP_CONTRACT=e.type_of_contract
+from Employee e
+where e.employee_ID=@employee_ID
+
+if (@EMP_CONTRACT='part_time')
+begin
+print ('cant apply for unpaid leave as a part time employee')
+return;
+end
+SELECT @leaveCount = COUNT(*)
+from leave l inner join unpaid_leave ul  on l.request_id = ul.request_id
+where ul.emp_id = @employee_ID   AND YEAR(start_date) = YEAR(GETDATE()) AND l.final_approval_status ='approved'
+IF @leaveCount > 1 or DATEDIFF(DAY, @start_date, @end_date) + 1 > 30
+BEGIN
+    PRINT 'can not apply for unpaid leave: you have 1 unpaid leave this year 
+    or your leave exceeds  30 days';
+    return 
+END
+
+if (@annualbalance >= (DATEDIFF(DAY, @start_date, @end_date) + 1))
+begin 
+print ('can not apply for unpaid leave before annual leave balance runs out')
+return 
+end 
+ELSE
+
+BEGIN
+insert into leave (date_of_request,start_date, end_date)
+values(GETDATE(), @start_date,@end_date );
+DECLARE @reqid INT = SCOPE_IDENTITY();
+insert into unpaid_leave (request_ID,emp_ID)
+values(@reqid,@employee_ID);
+
+select @role=er.role_name
+from Employee_Role er
+where er.emp_ID=@employee_ID
+------------------------------------------------
+if (@role='dean' or @role = 'vice dean')
+begin
+with ss as (select emp_ID
+from Employee_Role er inner join [role] r
+on r.role_name= er.role_name
+where r.rank = 4 and r.role_name = 'HR Representative' or r.rank = 1 and r.role_name='president')
+
+
+INSERT INTO  Employee_Approve_Leave (Emp1_ID,leave_ID)
+SELECT ss.emp_ID, @reqid
+FROM ss
+ end
+ ----------------------------------------------------
+ if (@role='HR employee')
+begin
+with ss as (select emp_ID
+from Employee_Role er inner join [role] r
+on r.role_name= er.role_name
+where r.rank = 3 and r.role_name = 'HR manager' or r.rank = 1 and r.role_name='president')
+
+
+INSERT INTO  Employee_Approve_Leave (Emp1_ID,leave_ID)
+SELECT ss.emp_ID, @reqid
+FROM ss
+end
+----------------------------------------------------
+else 
+begin
+with ss as (select emp_ID
+from Employee_Role er inner join [role] r
+on r.role_name= er.role_name
+where r.rank = 4 and r.role_name = 'HR employee' )
+
+
+INSERT INTO  Employee_Approve_Leave (Emp1_ID,leave_ID)
+SELECT ss.emp_ID, @reqid
+FROM ss;
+
+WITH HighestRankRole AS (
+    SELECT TOP 1 
+        R.rank AS emp_highest_rank
+    FROM Employee_Role ER
+    INNER JOIN Role R ON ER.role_name = R.role_name
+    WHERE ER.emp_ID = @employee_ID
+    ORDER BY R.rank ASC  -- lower number = higher authority
+)
+SELECT @emp_rank = emp_highest_rank
+FROM HighestRankRole;
+
+WHILE @current_emp_ID <=(SELECT MAX(employee_ID) FROM Employee)
+BEGIN
+    -- Skip the requesting employee
+    --IF @current_emp_ID <> @employee_ID
+    BEGIN
+        -- Get highest rank of this employee
+        WITH ApproverRank AS (
+            SELECT TOP 1 R.rank AS approver_highest_rank
+            FROM Employee_Role ER
+            INNER JOIN Role R ON ER.role_name = R.role_name
+            WHERE ER.emp_ID = @current_emp_ID
+            ORDER BY R.rank ASC
+        )
+        SELECT @approver_rank = approver_highest_rank FROM ApproverRank;
+
+       --
+        IF @approver_rank < @emp_rank
+        BEGIN
+            INSERT INTO Employee_Approve_Leave(Emp1_ID, Leave_ID, status)
+            VALUES (@current_emp_ID, @req_id, 'pending');
+        END
+    END
+
+    SET @current_emp_ID = @current_emp_ID + 1;  -- go to next employee
+END;
+end
+----------------------------
+END
+
+
+
+
+
+
+
+go
+------------------------------
+
+
+
+
+------------------------
+
+--N:Submit_compensation
+
+CREATE PROCEDURE Submit_compensation
+    @employee_ID INT,
+    @compensation_date DATE,
+    @reason VARCHAR(50),
+    @date_of_original_workday DATE,
+    @replacement_emp INT
+AS
+BEGIN
+
+DECLARE @role VARCHAR(50);
+DECLARE @rank INT;
+
+SELECT @role = role, @rank = rank
+FROM Employee
+WHERE employee_ID = @employee_ID;
+
+
+------------------------------
+
+
+
+WITH HighestRankRole AS (
+    SELECT TOP 1 
+        R.rank AS emp_highest_rank
+    FROM Employee_Role ER
+    INNER JOIN Role R ON ER.role_name = R.role_name
+    WHERE ER.emp_ID = @emp_ID
+    ORDER BY R.rank ASC  -- lower number = higher authority
+)
+SELECT @emp_rank = emp_highest_rank
+FROM HighestRankRole;
+
+
+
+---------------------------------------------
+
+
+
+DECLARE @emp_rank INT;
+DECLARE @current_emp_ID INT = 1;  -- start from 1
+DECLARE @approver_rank INT;
+
+
+WITH HighestRankRole AS (
+    SELECT TOP 1 
+        R.rank AS emp_highest_rank
+    FROM Employee_Role ER
+    INNER JOIN Role R ON ER.role_name = R.role_name
+    WHERE ER.emp_ID = @employee_ID
+    ORDER BY R.rank ASC
+)
+SELECT @emp_rank = emp_highest_rank
+FROM HighestRankRole;
+
+-- 2) Loop over employee IDs starting from 1
+WHILE @current_emp_ID <=(SELECT MAX(employee_ID) FROM Employee)
+BEGIN
+    -- Skip the requesting employee
+    --IF @current_emp_ID <> @employee_ID
+    BEGIN
+        -- Get highest rank of this employee
+        WITH ApproverRank AS (
+            SELECT TOP 1 R.rank AS approver_highest_rank
+            FROM Employee_Role ER
+            INNER JOIN Role R ON ER.role_name = R.role_name
+            WHERE ER.emp_ID = @current_emp_ID
+            ORDER BY R.rank ASC
+        )
+        SELECT @approver_rank = approver_highest_rank FROM ApproverRank;
+
+       --
+        IF @approver_rank < @emp_rank
+        BEGIN
+            INSERT INTO Employee_Approve_Leave(Emp1_ID, Leave_ID, status)
+            VALUES (@current_emp_ID, @req_id, 'pending');
+        END
+    END
+
+    SET @current_emp_ID = @current_emp_ID + 1;  -- go to next employee
+END;
+GO
+
+
+------------------------
+
+--O:Dean_andHR_Evaluation
+
+
+CREATE PROCEDURE Dean_andHR_Evaluation
+    @employee_ID INT,
+    @rating INT,
+    @comment VARCHAR(50),
+    @semester CHAR(3)
+AS
+BEGIN
+
+
+IF @rating NOT BETWEEN 1 AND 5
+BEGIN
+    PRINT 'Rating must be between 1 and 5.';
+    RETURN;
+END
+    INSERT INTO Performance(rating, comments, semester, emp_ID)
+    VALUES (@rating, @comment, @semester, @employee_ID);
+END;
+GO
